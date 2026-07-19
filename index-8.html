@@ -1,0 +1,4105 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Klasifikasi Baku Lapangan Usaha Indonesia · Saka Omni</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+  <!-- Firebase (Realtime Database) — dipakai untuk kirim statistik agregat kata-pencarian per kode KBLI -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+  <style>
+    :root {
+      --brand-primary: #2563EB;
+      --brand-primary-soft: #EFF6FF;
+      --brand-accent: #0EA5E9;
+      --surface: #FFFFFF;
+      --surface-2: #F8FAFC;
+      --surface-3: #F1F5F9;
+      --border: #E2E8F0;
+      --text-primary: #0F172A;
+      --text-secondary: #475569;
+      --text-muted: #94A3B8;
+      --badge-kbli: #2563EB;
+      --badge-kbji: #7C3AED;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.08);
+      --shadow-lg: 0 8px 32px rgba(0,0,0,.10);
+      --transition: 0.18s cubic-bezier(.4,0,.2,1);
+    }
+
+    [data-theme="dark"] {
+      --surface: #0F172A;
+      --surface-2: #1E293B;
+      --surface-3: #334155;
+      --border: #334155;
+      --text-primary: #F1F5F9;
+      --text-secondary: #94A3B8;
+      --text-muted: #64748B;
+      --brand-primary-soft: #1E3A5F;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--surface-2);
+      color: var(--text-primary);
+      min-height: 100vh;
+      transition: background var(--transition), color var(--transition);
+    }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      height: 56px;
+      display: flex; align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+    }
+    .topbar-brand {
+      font-size: 15px; font-weight: 700;
+      color: var(--brand-primary);
+      letter-spacing: -0.3px;
+      white-space: nowrap;
+    }
+    .topbar-brand span { color: var(--text-secondary); font-weight: 400; }
+    .topbar-spacer { flex: 1; }
+    .btn-icon {
+      width: 36px; height: 36px;
+      border-radius: var(--radius-sm);
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--text-secondary);
+      transition: all var(--transition);
+    }
+    .btn-icon:hover { background: var(--brand-primary-soft); color: var(--brand-primary); border-color: var(--brand-primary); }
+
+    /* ── SIDEBAR (auto-hide, overlay) ── */
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0;
+      width: 240px; max-width: 80vw;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      z-index: 300;
+      display: flex; flex-direction: column;
+      transform: translateX(-100%);
+      transition: transform 0.22s cubic-bezier(.4,0,.2,1);
+    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-head {
+      height: 56px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 10px 0 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .sidebar-top { flex: 1; overflow-y: auto; padding: 8px; }
+    .sidebar-bottom { flex-shrink: 0; padding: 8px; border-top: 1px solid var(--border); }
+    .sidebar-backdrop {
+      position: fixed; inset: 0; background: rgba(15,23,42,.45);
+      z-index: 290; opacity: 0; pointer-events: none;
+      transition: opacity 0.22s ease;
+    }
+    .sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
+    .tab-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 12px; border-radius: var(--radius-sm);
+      font-size: 14px; font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer; white-space: nowrap;
+      border-left: 3px solid transparent;
+      transition: all var(--transition);
+      user-select: none;
+    }
+    .tab-item:hover { color: var(--brand-primary); background: var(--brand-primary-soft); }
+    .tab-item.active { color: var(--brand-primary); background: var(--brand-primary-soft); border-left-color: var(--brand-primary); font-weight: 600; }
+    .tab-badge {
+      font-size: 10px; font-weight: 700;
+      padding: 1px 6px; border-radius: 99px;
+      background: var(--badge-kbli); color: #fff;
+      line-height: 16px;
+    }
+    .tab-badge.kbji { background: var(--badge-kbji); }
+    .tab-badge.settings { background: var(--text-muted); }
+
+    /* ── MAIN CONTENT ── */
+    .main-content { padding: 16px; max-width: 900px; margin: 0 auto; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ── SEARCH BAR ── */
+    .search-wrap {
+      position: relative; margin-bottom: 16px;
+    }
+    .search-wrap .bi-search {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      color: var(--text-muted); font-size: 14px; pointer-events: none;
+    }
+    .search-input {
+      width: 100%;
+      padding: 10px 12px 10px 36px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text-primary);
+      font-size: 14px;
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .search-input:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+    .search-input::placeholder { color: var(--text-muted); }
+
+    /* ── FILTER CHIPS ── */
+    .filter-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .chip {
+      padding: 4px 12px; border-radius: 99px;
+      border: 1px solid var(--border);
+      background: var(--surface); color: var(--text-secondary);
+      font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: all var(--transition);
+    }
+    .chip.active { background: var(--brand-primary); color: #fff; border-color: var(--brand-primary); }
+
+    /* ── STAT CARDS ── */
+    .stat-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+    @media(min-width:480px) { .stat-row { grid-template-columns: repeat(4,1fr); } }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      text-align: center;
+    }
+    .stat-val { font-size: 22px; font-weight: 800; color: var(--brand-primary); line-height: 1; }
+    .stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .5px; }
+
+    /* ── ACCORDION TREE ── */
+    .tree-node {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 8px;
+      overflow: hidden;
+      transition: box-shadow var(--transition);
+    }
+    .tree-node:hover { box-shadow: var(--shadow-sm); }
+    .tree-header {
+      display: flex; align-items: flex-start;
+      gap: 10px; padding: 12px 14px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .tree-header:active { background: var(--surface-3); }
+    .tree-code {
+      font-size: 11px; font-weight: 700;
+      background: var(--brand-primary-soft);
+      color: var(--brand-primary);
+      border-radius: 6px; padding: 2px 7px;
+      white-space: nowrap; flex-shrink: 0;
+      line-height: 18px; margin-top: 1px;
+    }
+    .tree-code.kbji { background: #F3F0FF; color: #7C3AED; }
+    .tree-title {
+      font-size: 13.5px; font-weight: 600;
+      color: var(--text-primary); flex: 1;
+      line-height: 1.4;
+    }
+    .tree-toggle {
+      font-size: 14px; color: var(--text-muted);
+      transition: transform var(--transition);
+      flex-shrink: 0; margin-top: 2px;
+    }
+    .tree-node.open > .tree-header .tree-toggle { transform: rotate(90deg); }
+
+    .tree-body { display: none; border-top: 1px solid var(--border); }
+    .tree-node.open > .tree-body { display: block; }
+
+    .tree-desc {
+      font-size: 12px; color: var(--text-secondary); line-height: 1.6;
+      padding: 10px 14px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .tree-children { padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+
+    /* Child level 2 */
+    .tree-node-2 {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .tree-header-2 {
+      display: flex; align-items: flex-start;
+      gap: 8px; padding: 9px 12px;
+      cursor: pointer; user-select: none;
+      background: var(--surface-2);
+    }
+    .tree-code-2 {
+      font-size: 10px; font-weight: 700;
+      background: var(--surface-3); color: var(--text-secondary);
+      border-radius: 4px; padding: 1px 6px;
+      white-space: nowrap; flex-shrink: 0; line-height: 16px;
+    }
+    .tree-title-2 { font-size: 12.5px; font-weight: 500; color: var(--text-primary); flex: 1; line-height: 1.4; }
+    .tree-toggle-2 { font-size: 12px; color: var(--text-muted); transition: transform var(--transition); flex-shrink: 0; margin-top: 1px; }
+    .tree-node-2.open > .tree-header-2 .tree-toggle-2 { transform: rotate(90deg); }
+    .tree-body-2 { display: none; border-top: 1px solid var(--border); }
+    .tree-node-2.open > .tree-body-2 { display: block; }
+    .tree-desc-2 { font-size: 11.5px; color: var(--text-secondary); line-height: 1.6; padding: 8px 12px; background: var(--surface-3); border-bottom: 1px solid var(--border); }
+    .tree-children-2 { padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+
+    /* Child level 3 (subgolongan) */
+    .tree-node-3 {
+      border: 1px solid var(--border);
+      border-radius: 6px; overflow: hidden;
+    }
+    .tree-header-3 {
+      display: flex; align-items: flex-start;
+      gap: 8px; padding: 8px 10px;
+      cursor: pointer; user-select: none;
+      background: var(--surface);
+    }
+    .tree-code-3 { font-size: 10px; font-weight: 700; background: var(--surface-2); color: var(--text-muted); border-radius: 4px; padding: 1px 5px; white-space: nowrap; flex-shrink: 0; line-height: 15px; }
+    .tree-title-3 { font-size: 12px; font-weight: 500; color: var(--text-primary); flex: 1; line-height: 1.35; }
+    .tree-toggle-3 { font-size: 11px; color: var(--text-muted); transition: transform var(--transition); flex-shrink: 0; }
+    .tree-node-3.open > .tree-header-3 .tree-toggle-3 { transform: rotate(90deg); }
+    .tree-body-3 { display: none; border-top: 1px solid var(--border); }
+    .tree-node-3.open > .tree-body-3 { display: block; }
+    .tree-desc-3 { font-size: 11px; color: var(--text-secondary); line-height: 1.6; padding: 7px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+    .tree-children-3 { padding: 6px; display: flex; flex-direction: column; gap: 3px; }
+
+    /* Leaf level 4 (kelompok) */
+    .leaf-item {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-2);
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    .leaf-item:hover { background: var(--brand-primary-soft); }
+    .leaf-item.open { background: var(--brand-primary-soft); }
+    .leaf-code { font-size: 10px; font-weight: 700; background: var(--surface-3); color: var(--text-muted); border-radius: 4px; padding: 1px 5px; white-space: nowrap; flex-shrink: 0; line-height: 15px; }
+    .leaf-title { font-size: 11.5px; font-weight: 500; color: var(--text-primary); flex: 1; }
+    .leaf-desc { font-size: 11px; color: var(--text-secondary); line-height: 1.6; padding: 6px 10px 8px; border: 1px solid var(--border); border-top: none; border-radius: 0 0 6px 6px; background: var(--surface); display: none; }
+    .leaf-desc.open { display: block; }
+
+    /* ── KBJI TABLE ── */
+    .kbji-table-wrap { overflow-x: auto; }
+    .kbji-table {
+      width: 100%; border-collapse: separate; border-spacing: 0;
+      font-size: 12.5px;
+    }
+    .kbji-table thead th {
+      background: var(--surface-2); color: var(--text-secondary);
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .5px; padding: 8px 12px;
+      border-bottom: 2px solid var(--border);
+      position: sticky; top: 0; white-space: nowrap;
+    }
+    .kbji-table tbody tr { transition: background var(--transition); }
+    .kbji-table tbody tr:hover td { background: var(--brand-primary-soft); }
+    .kbji-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text-primary); vertical-align: top; }
+    .kbji-table td:first-child { font-weight: 700; color: var(--badge-kbji); white-space: nowrap; }
+
+    /* ── KBJI tree ── */
+    .kbji-group-header {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+
+    /* ── UPLOAD ZONE ── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all var(--transition);
+      background: var(--surface);
+    }
+    .upload-zone:hover, .upload-zone.drag { border-color: var(--brand-primary); background: var(--brand-primary-soft); }
+    .upload-zone .bi { font-size: 32px; color: var(--text-muted); margin-bottom: 10px; display: block; }
+    .upload-zone p { margin: 0; font-size: 13px; color: var(--text-secondary); }
+    .upload-zone small { color: var(--text-muted); font-size: 11.5px; }
+    input[type=file] { display: none; }
+
+    /* ── SETTINGS CARD ── */
+    .settings-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 12px;
+    }
+    .settings-card h6 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-muted); margin-bottom: 14px; font-weight: 700; }
+    .info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .info-row:last-child { border: none; padding-bottom: 0; }
+    .info-row .lbl { color: var(--text-secondary); }
+    .info-row .val { font-weight: 600; color: var(--text-primary); }
+
+    /* ── FILE STATUS ── */
+    .file-status {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      margin-bottom: 8px; font-size: 13px;
+    }
+    .file-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+    .file-status.loaded .dot { background: #22C55E; }
+    .file-status .name { flex: 1; font-weight: 500; color: var(--text-primary); }
+    .file-status .meta { font-size: 11px; color: var(--text-muted); }
+    .file-status .btn-clear { font-size: 11px; color: #EF4444; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+    .file-status .btn-clear:hover { background: #FEE2E2; }
+
+    /* ── EMPTY & LOADING STATES ── */
+    .empty-state { text-align: center; padding: 48px 20px; }
+    .empty-state .bi { font-size: 40px; color: var(--text-muted); display: block; margin-bottom: 12px; }
+    .empty-state p { font-size: 14px; color: var(--text-secondary); margin: 0; }
+    .empty-state small { font-size: 12px; color: var(--text-muted); }
+    .spinner-wrap { display: flex; justify-content: center; padding: 40px; }
+
+    /* ── SEARCH RESULT HIGHLIGHT ── */
+    .hl { background: #FEF08A; color: #92400E; border-radius: 2px; padding: 0 1px; }
+    [data-theme="dark"] .hl { background: #713F12; color: #FEF08A; }
+
+    /* ── BREADCRUMB ── */
+    .breadcrumb-trail { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; align-items: center; }
+    .breadcrumb-trail span { font-size: 11px; color: var(--text-muted); }
+    .breadcrumb-trail .crumb { font-size: 11px; color: var(--brand-primary); cursor: pointer; }
+    .breadcrumb-trail .crumb:hover { text-decoration: underline; }
+
+    /* ── RESULT COUNT ── */
+    .result-meta { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+
+    /* ── MOBILE FIXES ── */
+    @media(max-width:480px) {
+      .main-content { padding: 12px; }
+      .stat-val { font-size: 18px; }
+    }
+
+    /* ── URAIAN STRUCTURED PARAGRAPHS ── */
+    .uraian-section {
+      margin-bottom: 6px;
+    }
+    .uraian-section:last-child { margin-bottom: 0; }
+    .uraian-section-label {
+      display: block;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 3px;
+      font-size: inherit;
+    }
+    .uraian-para {
+      margin: 0 0 6px 0;
+      padding: 0;
+    }
+    .uraian-para:last-child { margin-bottom: 0; }
+    .uraian-list {
+      margin: 3px 0 6px 0;
+      padding-left: 18px;
+      list-style: disc;
+    }
+    .uraian-list:last-child { margin-bottom: 0; }
+    .uraian-list li {
+      margin-bottom: 3px;
+      padding-left: 2px;
+      line-height: 1.6;
+    }
+    .uraian-list li:last-child { margin-bottom: 0; }
+
+    /* ── CROSS-REFERENCE LINKS ── */
+    .ref-link {
+      color: var(--brand-primary);
+      font-weight: 700;
+      text-decoration: none;
+      border-bottom: 1.5px solid currentColor;
+      padding-bottom: 0;
+      border-radius: 2px;
+      transition: background var(--transition), color var(--transition);
+    }
+    .ref-link:hover {
+      background: var(--brand-primary-soft);
+      color: var(--brand-primary);
+      text-decoration: none;
+    }
+
+    /* ── ACCORDION ANIMATIONS ── */
+    .tree-body, .tree-body-2, .tree-body-3 { animation: slideDown .12s ease; }
+    @keyframes slideDown { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+
+    /* ── CARI USAHA PAGE ── */
+    .cari-hero {
+      display: flex; align-items: center; gap: 12px;
+      background: linear-gradient(135deg, #EFF6FF 0%, #E0F2FE 100%);
+      border: 1px solid #BFDBFE;
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    [data-theme="dark"] .cari-hero {
+      background: linear-gradient(135deg, #1e3a5f 0%, #0c2a3d 100%);
+      border-color: #2563eb44;
+    }
+    .cari-hero-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: var(--brand-primary); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .cari-hero-title { font-size: 13.5px; font-weight: 700; color: var(--text-primary); }
+    .cari-hero-sub { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; line-height: 1.4; }
+
+    .cari-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .cari-chip-btn {
+      padding: 4px 11px; border-radius: 99px;
+      border: 1px solid var(--border);
+      background: var(--surface); color: var(--text-secondary);
+      font-size: 11.5px; font-weight: 500; cursor: pointer;
+      transition: all var(--transition); white-space: nowrap;
+    }
+    .cari-chip-btn:hover { background: var(--brand-primary); color: #fff; border-color: var(--brand-primary); }
+
+    .cari-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 8px;
+      overflow: hidden;
+      transition: box-shadow var(--transition);
+    }
+    .cari-card:hover { box-shadow: var(--shadow-md); }
+    .cari-card-header {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px 14px;
+    }
+    .cari-score-ring {
+      width: 42px; height: 42px; flex-shrink: 0;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800; line-height: 1;
+      border: 2.5px solid;
+      flex-direction: column;
+    }
+    .cari-score-ring.high  { color: #16a34a; border-color: #16a34a; background: #f0fdf4; }
+    .cari-score-ring.med   { color: #d97706; border-color: #d97706; background: #fffbeb; }
+    .cari-score-ring.low   { color: #64748b; border-color: #cbd5e1; background: var(--surface-2); }
+    [data-theme="dark"] .cari-score-ring.high { background: #052e16; }
+    [data-theme="dark"] .cari-score-ring.med  { background: #1c1403; }
+    .cari-score-pct { font-size: 12px; font-weight: 800; }
+    .cari-score-lbl { font-size: 8px; font-weight: 600; letter-spacing: .3px; opacity: .8; }
+
+    .cari-card-body { flex: 1; min-width: 0; }
+    .cari-card-code {
+      font-size: 10px; font-weight: 700;
+      background: var(--brand-primary-soft); color: var(--brand-primary);
+      border-radius: 5px; padding: 1px 7px;
+      display: inline-block; margin-bottom: 4px;
+    }
+    .cari-card-title {
+      font-size: 13px; font-weight: 600; color: var(--text-primary);
+      line-height: 1.4; margin-bottom: 3px;
+    }
+    .cari-card-level {
+      font-size: 10.5px; color: var(--text-muted);
+      display: flex; align-items: center; gap: 4px;
+    }
+    .cari-card-path {
+      font-size: 10px; color: var(--text-muted);
+      padding: 0 14px 10px;
+      display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+    }
+    .cari-card-path .path-crumb {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 7px;
+      font-size: 10px; font-weight: 500; color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    .cari-card-why {
+      font-size: 10.5px; color: var(--text-muted);
+      padding: 6px 14px 10px;
+      border-top: 1px solid var(--border);
+      background: var(--surface-2);
+      display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+    }
+    .cari-why-tag {
+      background: #FEF9C3; color: #854D0E;
+      border-radius: 4px; padding: 1px 6px;
+      font-size: 10px; font-weight: 600;
+    }
+    [data-theme="dark"] .cari-why-tag { background: #3b2200; color: #fde68a; }
+    .cari-card-actions {
+      padding: 0 14px 12px;
+      display: flex; gap: 6px;
+    }
+    .btn-cari-open {
+      flex: 1; padding: 7px 12px;
+      background: var(--brand-primary); color: #fff;
+      border: none; border-radius: var(--radius-sm);
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: opacity var(--transition);
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+    }
+    .btn-cari-open:hover { opacity: .88; }
+    .btn-cari-copy {
+      padding: 7px 12px;
+      background: var(--surface-3); color: var(--text-secondary);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: all var(--transition);
+      display: flex; align-items: center; gap: 5px;
+    }
+    .btn-cari-copy:hover { background: var(--brand-primary-soft); color: var(--brand-primary); }
+
+    .btn-cari-fb {
+      padding: 7px 10px;
+      background: var(--surface-3); color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      font-size: 13px; cursor: pointer;
+      transition: all var(--transition);
+      display: flex; align-items: center;
+    }
+    .btn-fb-up:hover  { background: #dcfce7; color: #16a34a; border-color: #16a34a; }
+    .btn-fb-down:hover{ background: #fee2e2; color: #dc2626; border-color: #dc2626; }
+    [data-theme="dark"] .btn-fb-up:hover  { background: #052e16; color: #4ade80; border-color: #4ade80; }
+    [data-theme="dark"] .btn-fb-down:hover{ background: #3b0d0d; color: #f87171; border-color: #f87171; }
+
+    .cari-no-data {
+      text-align: center; padding: 36px 20px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .cari-no-data .bi { font-size: 32px; color: var(--text-muted); display: block; margin-bottom: 10px; }
+    .cari-no-data p { font-size: 13px; color: var(--text-secondary); margin: 0; }
+    .cari-no-data small { font-size: 11.5px; color: var(--text-muted); }
+
+    /* ── TOAST ── */
+    .toast-container { position: fixed; bottom: 20px; right: 16px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+    .toast-msg {
+      background: var(--text-primary); color: var(--surface);
+      padding: 10px 16px; border-radius: var(--radius-sm);
+      font-size: 13px; box-shadow: var(--shadow-md);
+      animation: toastIn .18s ease;
+    }
+    @keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+    /* ── CARI HERO: tips icon di samping judul ── */
+    .cari-hero-title-row { display: flex; align-items: center; gap: 6px; }
+    .btn-tips-info {
+      width: 20px; height: 20px; border-radius: 50%;
+      background: var(--brand-primary); color: #fff;
+      border: none; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 11px; cursor: pointer; flex-shrink: 0;
+      transition: transform var(--transition);
+    }
+    .btn-tips-info:hover { transform: scale(1.12); }
+
+    /* ── TIPS MODAL ── */
+    .tips-modal-overlay {
+      position: fixed; inset: 0; z-index: 2000;
+      background: rgba(15,23,42,.55);
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+      animation: toastIn .18s ease;
+    }
+    .tips-modal-overlay.hidden { display: none; }
+    .tips-modal-box {
+      background: var(--surface); border-radius: var(--radius);
+      max-width: 420px; width: 100%;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      max-height: 86vh; display: flex; flex-direction: column;
+    }
+    .tips-modal-head {
+      display: flex; align-items: center; gap: 10px;
+      padding: 16px 18px; border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, #EFF6FF 0%, #E0F2FE 100%);
+    }
+    [data-theme="dark"] .tips-modal-head {
+      background: linear-gradient(135deg, #1e3a5f 0%, #0c2a3d 100%);
+    }
+    .tips-modal-head .bi { font-size: 22px; color: var(--brand-primary); }
+    .tips-modal-head h6 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--text-primary); }
+    .tips-modal-body { padding: 16px 18px; overflow-y: auto; font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; }
+    .tips-modal-body ul { padding-left: 18px; margin: 6px 0 12px; }
+    .tips-modal-body li { margin-bottom: 6px; }
+    .tips-modal-body .tips-section-title { font-weight: 700; color: var(--text-primary); font-size: 12.5px; margin-bottom: 4px; }
+    .tips-modal-foot {
+      padding: 12px 18px; border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .tips-modal-checkbox-lbl {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11.5px; color: var(--text-muted); cursor: pointer; user-select: none;
+    }
+    .tips-modal-checkbox-lbl input { accent-color: var(--brand-primary); cursor: pointer; }
+    .btn-tips-close {
+      padding: 7px 16px; border-radius: var(--radius-sm);
+      background: var(--brand-primary); color: #fff; border: none;
+      font-size: 12.5px; font-weight: 600; cursor: pointer; flex-shrink: 0;
+      transition: opacity var(--transition);
+    }
+    .btn-tips-close:hover { opacity: .9; }
+
+    /* ── FILTER SKALA USAHA (UMKM / Besar) ── */
+    .skala-filter-row {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .skala-filter-chk {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 99px;
+      border: 1px solid var(--border);
+      background: var(--surface); color: var(--text-secondary);
+      font-size: 11.5px; font-weight: 500; cursor: pointer;
+      transition: all var(--transition); user-select: none;
+    }
+    .skala-filter-chk input { accent-color: var(--brand-primary); cursor: pointer; margin: 0; }
+    .skala-filter-chk.active { background: var(--brand-primary-soft); color: var(--brand-primary); border-color: var(--brand-primary); }
+
+    /* ── LEGAL LINKS (di bawah Versi KBJI) ── */
+    .legal-links-row {
+      display: flex; gap: 8px; margin-top: 10px;
+      padding-top: 10px; border-top: 1px solid var(--border);
+    }
+    .btn-legal-link {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 8px 10px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface-3); color: var(--text-secondary);
+      font-size: 11.5px; font-weight: 600; cursor: pointer;
+      transition: all var(--transition);
+    }
+    .btn-legal-link:hover { background: var(--brand-primary-soft); color: var(--brand-primary); border-color: var(--brand-primary); }
+    .btn-legal-link i { font-size: 13px; }
+
+    /* ── FULL LEGAL MODAL (TOS / Privacy Policy) ── */
+    .legal-modal-overlay {
+      position: fixed; inset: 0; z-index: 2100;
+      background: rgba(15,23,42,.6);
+      display: flex; align-items: center; justify-content: center;
+      padding: 0;
+      animation: toastIn .18s ease;
+    }
+    .legal-modal-overlay.hidden { display: none; }
+    .legal-modal-box {
+      background: var(--surface);
+      width: 100%; height: 100%;
+      max-width: 720px; max-height: 100%;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    @media (min-width: 600px) {
+      .legal-modal-box { height: 92vh; max-height: 820px; border-radius: var(--radius); box-shadow: var(--shadow-lg); }
+      .legal-modal-overlay { padding: 16px; }
+    }
+    .legal-modal-head {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      background: var(--surface); flex-shrink: 0;
+    }
+    .legal-modal-head .bi { font-size: 19px; color: var(--brand-primary); }
+    .legal-modal-head h6 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--text-primary); flex: 1; }
+    .legal-modal-head .legal-modal-updated { font-size: 10.5px; color: var(--text-muted); font-weight: 400; margin-top: 1px; }
+    .btn-legal-modal-close {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--surface-3); border: 1px solid var(--border); color: var(--text-secondary);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0; font-size: 14px;
+      transition: all var(--transition);
+    }
+    .btn-legal-modal-close:hover { background: #fee2e2; color: #dc2626; border-color: #dc2626; }
+    .legal-modal-body { padding: 18px 20px 28px; overflow-y: auto; flex: 1; font-size: 12.5px; color: var(--text-secondary); line-height: 1.7; }
+    .legal-modal-body h6.sec-title {
+      font-size: 13px; font-weight: 700; color: var(--text-primary);
+      margin: 20px 0 8px; display: flex; align-items: center; gap: 6px;
+    }
+    .legal-modal-body h6.sec-title:first-child { margin-top: 0; }
+    .legal-modal-body h6.sec-title .sec-num {
+      width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0;
+      background: var(--brand-primary-soft); color: var(--brand-primary);
+      font-size: 10.5px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+    }
+    .legal-modal-body p { margin: 0 0 10px; }
+    .legal-modal-body ul { padding-left: 18px; margin: 6px 0 12px; }
+    .legal-modal-body li { margin-bottom: 5px; }
+    .legal-modal-body strong { color: var(--text-primary); }
+    .legal-callout {
+      background: var(--brand-primary-soft); border: 1px solid #BFDBFE;
+      border-radius: var(--radius-sm); padding: 10px 12px; margin: 10px 0;
+      font-size: 11.5px; color: var(--text-primary);
+    }
+    [data-theme="dark"] .legal-callout { border-color: #2563eb44; }
+    .legal-modal-foot {
+      padding: 12px 18px; border-top: 1px solid var(--border); flex-shrink: 0;
+      display: flex; justify-content: flex-end;
+    }
+    /* ── GITHUB SYNC BANNER ── */
+    .sync-banner {
+      position: fixed; top: 56px; left: 0; right: 0; z-index: 99;
+      background: linear-gradient(90deg, #0f766e, #0369a1);
+      color: #fff;
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px;
+      font-size: 12.5px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.18);
+      animation: slideDown .22s ease;
+    }
+    .sync-banner.hidden { display: none; }
+    .sync-banner .bi { font-size: 16px; flex-shrink: 0; }
+    .sync-banner-text { flex: 1; line-height: 1.4; }
+    .sync-banner-text strong { font-weight: 700; }
+    .btn-sync-banner {
+      padding: 5px 12px; border-radius: 6px;
+      background: rgba(255,255,255,.2); color: #fff;
+      border: 1px solid rgba(255,255,255,.4);
+      font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0;
+      transition: background .15s;
+    }
+    .btn-sync-banner:hover { background: rgba(255,255,255,.35); }
+    .btn-sync-banner-dismiss {
+      padding: 4px 8px; border-radius: 6px;
+      background: transparent; color: rgba(255,255,255,.7);
+      border: none; font-size: 15px; cursor: pointer; flex-shrink: 0;
+      transition: color .15s;
+    }
+    .btn-sync-banner-dismiss:hover { color: #fff; }
+    /* push sidebar below banner when active */
+    body.has-sync-banner .sidebar,
+    body.has-sync-banner .sidebar-backdrop { top: 56px; }
+    .sync-progress-overlay {
+      position: fixed; inset: 0; z-index: 3000;
+      background: rgba(15,23,42,.72);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .sync-progress-overlay.hidden { display: none; }
+    .sync-progress-box {
+      background: var(--surface); border-radius: var(--radius);
+      padding: 28px 24px; max-width: 340px; width: 100%;
+      box-shadow: var(--shadow-lg); text-align: center;
+    }
+    .sync-progress-box .bi { font-size: 36px; color: var(--brand-primary); display: block; margin-bottom: 12px; }
+    .sync-progress-title { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+    .sync-progress-sub { font-size: 12.5px; color: var(--text-secondary); margin-bottom: 16px; }
+    .sync-progress-bar-wrap { background: var(--surface-3); border-radius: 99px; height: 6px; overflow: hidden; margin-bottom: 10px; }
+    .sync-progress-bar { height: 100%; background: var(--brand-primary); border-radius: 99px; transition: width .3s; }
+    .sync-progress-file { font-size: 11px; color: var(--text-muted); }
+    .sync-alert {
+      padding: 8px 12px; border-radius: var(--radius-sm);
+      font-size: 12px; display: flex; align-items: flex-start; gap: 7px; line-height: 1.5;
+    }
+    .sync-alert.info { background: #EFF6FF; color: #1e40af; border: 1px solid #BFDBFE; }
+    .sync-alert.success { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
+    .sync-alert.warn { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
+    .sync-alert.error { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
+    [data-theme="dark"] .sync-alert.info { background: #1e3a5f; color: #93c5fd; border-color: #1d4ed844; }
+    [data-theme="dark"] .sync-alert.success { background: #052e16; color: #86efac; border-color: #16a34a44; }
+    [data-theme="dark"] .sync-alert.warn { background: #1c1403; color: #fde68a; border-color: #d9770644; }
+    [data-theme="dark"] .sync-alert.error { background: #3b0d0d; color: #fca5a5; border-color: #dc262644; }
+
+    #syncStatusBtn[data-state="update"] { background: #0f766e; color: #fff; border-color: #0f766e; animation: pulse 1.8s infinite; }
+    #syncStatusBtn[data-state="syncing"] { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.65} }
+
+
+    /* ══════════════════════════════════════════════
+       STATISTIK PENCARIAN (agregat per kode KBLI dari Firebase RTDB)
+       ══════════════════════════════════════════════ */
+    .stats-hero {
+      display: flex; align-items: flex-start; gap: 12px;
+      background: linear-gradient(135deg, var(--brand-primary-soft), var(--surface));
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px 16px; margin-bottom: 14px;
+    }
+    .stats-hero-icon {
+      width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+      background: var(--brand-primary); color: #fff;
+      display: flex; align-items: center; justify-content: center; font-size: 18px;
+    }
+    .stats-hero-title { font-weight: 700; font-size: 14px; color: var(--text-primary); }
+    .stats-hero-sub { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .stats-conn-badge {
+      font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
+      display: inline-flex; align-items: center; gap: 4px; margin-top: 8px;
+    }
+    .stats-conn-badge.on  { background: #DCFCE7; color: #15803D; }
+    .stats-conn-badge.off { background: #FEE2E2; color: #B91C1C; }
+    [data-theme="dark"] .stats-conn-badge.on  { background: #052e16; color: #4ade80; }
+    [data-theme="dark"] .stats-conn-badge.off { background: #450a0a; color: #f87171; }
+    .stats-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px; margin-bottom: 10px; box-shadow: var(--shadow-sm);
+    }
+    .stats-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .stats-card-code {
+      font-family: 'SFMono-Regular', Consolas, monospace; font-weight: 700; font-size: 13px;
+      color: var(--brand-primary); background: var(--brand-primary-soft);
+      padding: 2px 8px; border-radius: 6px; display: inline-block;
+    }
+    .stats-card-total {
+      font-size: 11px; font-weight: 700; color: #fff; background: var(--brand-accent);
+      padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+    }
+    .stats-card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 8px 0 2px; }
+    .stats-card-path { font-size: 11px; color: var(--text-muted); margin-bottom: 10px; }
+    .stats-kata-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .stats-kata-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: var(--surface-3); border: 1px solid var(--border); border-radius: 999px;
+      padding: 4px 10px; font-size: 12px; color: var(--text-secondary);
+    }
+    .stats-kata-chip b { color: var(--text-primary); font-weight: 700; }
+    .stats-kata-count {
+      background: var(--brand-primary); color: #fff; font-size: 10px; font-weight: 700;
+      min-width: 18px; height: 18px; border-radius: 999px; display: inline-flex;
+      align-items: center; justify-content: center; padding: 0 5px;
+    }
+    .stats-empty { text-align: center; padding: 40px 16px; color: var(--text-muted); }
+    .stats-empty i { font-size: 32px; display: block; margin-bottom: 10px; opacity: .5; }
+  </style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="btn-icon" id="sidebarToggle" title="Menu" onclick="toggleSidebar()">
+    <i class="bi bi-list"></i>
+  </div>
+  <div class="topbar-brand">Klasifikasi Baku <span>Lapangan Usaha Indonesia</span></div>
+  <div class="topbar-spacer"></div>
+  <div class="btn-icon" id="syncStatusBtn" title="Sinkronisasi Data GitHub" onclick="switchTab('settings'); setTimeout(()=>document.getElementById('syncCard').scrollIntoView({behavior:'smooth'}),120)" style="display:none">
+    <i class="bi bi-cloud-check" id="syncStatusIcon"></i>
+  </div>
+  <div class="btn-icon" id="themeToggle" title="Ganti tema">
+    <i class="bi bi-moon" id="themeIcon"></i>
+  </div>
+</div>
+
+<!-- SIDEBAR (auto-hide, overlay) -->
+<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+<nav class="sidebar" id="sidebarNav">
+  <div class="sidebar-head">
+    <span>Menu</span>
+    <div class="btn-icon" onclick="closeSidebar()" title="Tutup"><i class="bi bi-x-lg"></i></div>
+  </div>
+  <div class="sidebar-top">
+    <div class="tab-item active" data-tab="kbli" onclick="switchTab('kbli')">
+      <span class="tab-badge">KBLI</span>
+      <span>Lap. Usaha</span>
+    </div>
+    <div class="tab-item" data-tab="cari" onclick="switchTab('cari')">
+      <span class="tab-badge" style="background:#0EA5E9">CARI</span>
+      <span>Cari Usaha</span>
+    </div>
+    <div class="tab-item" data-tab="kbji" onclick="switchTab('kbji')">
+      <span class="tab-badge kbji">KBJI</span>
+      <span>Jab. Industri</span>
+    </div>
+    <div class="tab-item" data-tab="stats" onclick="switchTab('stats')">
+      <span class="tab-badge" style="background:#7C3AED">📊</span>
+      <span>Statistik</span>
+    </div>
+  </div>
+  <div class="sidebar-bottom">
+    <div class="tab-item" data-tab="settings" onclick="switchTab('settings')">
+      <i class="bi bi-gear"></i>
+      <span>Pengaturan</span>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main-content">
+
+
+  <!-- PAGE: KBLI -->
+  <div class="page active" id="page-kbli">
+    <div id="kbliStats" class="stat-row" style="display:none"></div>
+    <div class="search-wrap">
+      <i class="bi bi-search"></i>
+      <input class="search-input" id="kbliSearch" type="text" placeholder="Cari kode atau judul KBLI…" oninput="onKbliSearch(this.value)" />
+    </div>
+    <div class="result-meta" id="kbliResultMeta"></div>
+    <div id="kbliTree"></div>
+  </div>
+
+  <!-- PAGE: CARI USAHA -->
+  <div class="page" id="page-cari">
+    <div class="cari-hero">
+      <div class="cari-hero-icon"><i class="bi bi-lightbulb-fill"></i></div>
+      <div>
+        <div class="cari-hero-title-row">
+          <div class="cari-hero-title">Pencarian Bahasa Sehari-hari</div>
+          <button class="btn-tips-info" onclick="openTipsModal()" title="Tips & Trik Pencarian">
+            <i class="bi bi-question-lg"></i>
+          </button>
+        </div>
+        <div class="cari-hero-sub">Ketik nama usaha dengan kata biasa — sistem akan mencocokkan ke kode KBLI</div>
+      </div>
+    </div>
+    <div class="search-wrap" style="margin-bottom:8px">
+      <i class="bi bi-search"></i>
+      <input class="search-input" id="cariInput" type="text"
+        placeholder="contoh: jual bensin, bengkel motor, toko kelontong, warung makan…"
+        oninput="onCariInput(this.value)"
+        autocomplete="off" autocorrect="off" spellcheck="false" />
+    </div>
+    <div class="skala-filter-row" id="skalaFilterRow">
+      <label class="skala-filter-chk active" id="skalaChkSemua">
+        <input type="checkbox" checked onchange="onSkalaFilterChange('semua', this)" /> Semua Skala
+      </label>
+      <label class="skala-filter-chk" id="skalaChkUmkm">
+        <input type="checkbox" onchange="onSkalaFilterChange('umkm', this)" /> UMKM
+      </label>
+      <label class="skala-filter-chk" id="skalaChkBesar">
+        <input type="checkbox" onchange="onSkalaFilterChange('besar', this)" /> Usaha Besar
+      </label>
+    </div>
+    <div class="cari-chips" id="cariChips"></div>
+    <div class="result-meta" id="cariMeta"></div>
+    <div id="cariResults"></div>
+  </div>
+
+  <!-- PAGE: STATISTIK PENCARIAN (agregat per kode KBLI, dari Firebase RTDB) -->
+  <div class="page" id="page-stats">
+    <div class="stats-hero">
+      <div class="stats-hero-icon"><i class="bi bi-bar-chart-line-fill"></i></div>
+      <div>
+        <div class="stats-hero-title">Statistik Kata Pencarian</div>
+        <div class="stats-hero-sub">Agregat kata yang dicari pengguna, dikelompokkan per kode KBLI. Data terkumpul otomatis dan realtime dari semua pengguna.</div>
+        <span class="stats-conn-badge off" id="statsConnBadge"><i class="bi bi-circle-fill" style="font-size:6px"></i> Menghubungkan…</span>
+      </div>
+    </div>
+    <div class="result-meta" id="statsMeta"></div>
+    <div id="statsResults"></div>
+  </div>
+
+  <!-- TIPS MODAL: Cari Usaha -->
+  <div class="tips-modal-overlay hidden" id="tipsModalOverlay">
+    <div class="tips-modal-box">
+      <div class="tips-modal-head">
+        <i class="bi bi-lightbulb-fill"></i>
+        <h6>Tips &amp; Trik Pencarian Usaha</h6>
+      </div>
+      <div class="tips-modal-body">
+        <div class="tips-section-title">Cara Menulis Kata Kunci</div>
+        <ul>
+          <li>Gunakan bahasa sehari-hari, contoh: <em>"jual bensin"</em>, <em>"bengkel motor"</em>, <em>"warung makan"</em>.</li>
+          <li>Untuk usaha dagang, awali dengan kata <strong>jual / toko / warung / agen / sewa</strong> agar sistem mengarah ke kategori Perdagangan, bukan ke kategori produsen/budidaya bahan mentahnya.</li>
+          <li>Untuk usaha jasa/layanan, gunakan kata <strong>jasa / klinik / servis / cukur / salon</strong> agar sistem mengarah ke kategori Jasa, bukan ke kategori produksi.</li>
+          <li>Untuk usaha pertanian/peternakan, gunakan kata <strong>budidaya, pembudidayaan, ternak, peternakan</strong> agar hasil lebih presisi ke kategori Pertanian/Peternakan, bukan ke kategori dagang eceran hasil panennya.</li>
+        </ul>
+        <div class="tips-section-title">Filter Skala Usaha</div>
+        <ul>
+          <li>Centang <strong>UMKM</strong> untuk memprioritaskan hasil berskala usaha mikro, kecil, dan menengah (rumah tangga, perorangan).</li>
+          <li>Centang <strong>Usaha Besar</strong> untuk memprioritaskan hasil berskala industri/korporasi besar.</li>
+          <li>Filter ini menyesuaikan urutan hasil — bukan menghapus opsi lain, karena kode KBLI sendiri tidak membedakan skala usaha secara baku.</li>
+        </ul>
+        <div class="tips-section-title">Manfaatkan Tombol Aksi</div>
+        <ul>
+          <li>Gunakan 👍/👎 pada hasil pencarian untuk melatih sistem agar makin akurat ke depannya.</li>
+          <li>Klik <strong>Buka di KBLI</strong> untuk melihat posisi kode dalam hierarki lengkap.</li>
+        </ul>
+      </div>
+      <div class="tips-modal-foot">
+        <label class="tips-modal-checkbox-lbl">
+          <input type="checkbox" id="chkDontShowTips" /> Jangan tampilkan lagi
+        </label>
+        <button class="btn-tips-close" onclick="closeTipsModal()">Mengerti</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEGAL MODAL: Syarat & Ketentuan (TOS) -->
+  <div class="legal-modal-overlay hidden" id="legalModalTos">
+    <div class="legal-modal-box">
+      <div class="legal-modal-head">
+        <i class="bi bi-file-text"></i>
+        <div style="flex:1">
+          <h6>Syarat &amp; Ketentuan</h6>
+          <div class="legal-modal-updated">Terakhir diperbarui: 29 Juni 2026</div>
+        </div>
+        <button class="btn-legal-modal-close" onclick="closeLegalModal('tos')"><i class="bi bi-x"></i></button>
+      </div>
+      <div class="legal-modal-body">
+        <p>Dengan menggunakan aplikasi <strong>Klasifikasi Baku Lapangan Usaha Indonesia</strong> ("Aplikasi") yang dikembangkan oleh <strong>Saka Omni Webapps</strong>, Anda dianggap menyetujui syarat &amp; ketentuan berikut.</p>
+
+        <h6 class="sec-title"><span class="sec-num">1</span> Sifat Aplikasi</h6>
+        <p>Aplikasi ini berjalan sepenuhnya di sisi perangkat Anda (client-side) sebagai alat bantu referensi dan pencarian kode <strong>KBLI</strong> (Klasifikasi Baku Lapangan Usaha Indonesia) dan <strong>KBJI</strong> (Klasifikasi Baku Jenis Pekerjaan Indonesia). Aplikasi ini bersifat independen dan <strong>bukan produk resmi</strong> Badan Pusat Statistik (BPS) maupun lembaga pemerintah manapun.</p>
+
+        <h6 class="sec-title"><span class="sec-num">2</span> Sumber &amp; Akurasi Data</h6>
+        <p>Data klasifikasi (KBLI/KBJI) dapat diperoleh melalui dua cara: (1) diunggah sendiri oleh pengguna dalam format JSON dan diproses secara lokal, atau (2) diunduh secara otomatis dari repositori publik GitHub <code>mlev99/klasifikasi25</code> melalui CDN jsDelivr saat perangkat terhubung ke internet. Pengembang tidak menjamin kelengkapan, keakuratan, atau kesesuaian data dengan publikasi resmi BPS versi terbaru. Hasil pencarian — termasuk skor kecocokan dan sistem pembelajaran (scoring engine) — bersifat <strong>perkiraan/rekomendasi</strong>, bukan keputusan final.</p>
+        <div class="legal-callout"><i class="bi bi-info-circle"></i> Untuk keperluan resmi (sensus, pelaporan statistik, perizinan usaha, dsb), selalu verifikasi kode klasifikasi dengan dokumen resmi BPS atau instansi berwenang terkait.</div>
+
+        <h6 class="sec-title"><span class="sec-num">3</span> Tanggung Jawab Pengguna</h6>
+        <ul>
+          <li>Pengguna bertanggung jawab atas keabsahan file data (KBLI/KBJI) yang diunggah ke Aplikasi.</li>
+          <li>Pengguna bertanggung jawab memverifikasi hasil pencarian sebelum digunakan untuk keperluan resmi.</li>
+          <li>Pengguna tidak diperkenankan menggunakan Aplikasi untuk tujuan yang melanggar hukum yang berlaku di Indonesia.</li>
+        </ul>
+
+        <h6 class="sec-title"><span class="sec-num">4</span> Batasan Tanggung Jawab</h6>
+        <p>Aplikasi disediakan <strong>"sebagaimana adanya"</strong> (as-is) tanpa jaminan apapun, baik tersurat maupun tersirat. Pengembang tidak bertanggung jawab atas kerugian langsung maupun tidak langsung yang timbul dari penggunaan, ketidaktersediaan, atau kesalahan hasil Aplikasi, termasuk namun tidak terbatas pada kesalahan klasifikasi yang berdampak pada pelaporan atau keputusan bisnis pengguna.</p>
+
+        <h6 class="sec-title"><span class="sec-num">4b</span> Fitur Sinkronisasi Otomatis</h6>
+        <p>Versi 1.1.0 ke atas dilengkapi fitur <strong>auto-sinkronisasi</strong> yang, saat perangkat terhubung ke internet, secara berkala memeriksa pembaruan file JSON di repositori publik <code>github.com/mlev99/klasifikasi25</code> melalui GitHub API dan jsDelivr CDN. Penggunaan fitur ini tunduk pada ketentuan layanan GitHub dan jsDelivr. Pengembang tidak bertanggung jawab atas ketersediaan atau perubahan layanan pihak ketiga tersebut.</p>
+
+        <h6 class="sec-title"><span class="sec-num">5</span> Hak Kekayaan Intelektual</h6>
+        <p>Kerangka kerja, tampilan, dan logika Aplikasi adalah hak cipta Saka Omni Webapps. Data klasifikasi KBLI/KBJI sendiri adalah milik dan hak Badan Pusat Statistik Republik Indonesia sebagai penerbit resmi.</p>
+
+        <h6 class="sec-title"><span class="sec-num">6</span> Perubahan Ketentuan</h6>
+        <p>Ketentuan ini dapat diperbarui sewaktu-waktu. Penggunaan berkelanjutan atas Aplikasi setelah perubahan dianggap sebagai persetujuan atas ketentuan yang telah diperbarui.</p>
+      </div>
+      <div class="legal-modal-foot">
+        <button class="btn-tips-close" onclick="closeLegalModal('tos')">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEGAL MODAL: Kebijakan Privasi -->
+  <div class="legal-modal-overlay hidden" id="legalModalPrivacy">
+    <div class="legal-modal-box">
+      <div class="legal-modal-head">
+        <i class="bi bi-shield-check"></i>
+        <div style="flex:1">
+          <h6>Kebijakan Privasi</h6>
+          <div class="legal-modal-updated">Terakhir diperbarui: 29 Juni 2026</div>
+        </div>
+        <button class="btn-legal-modal-close" onclick="closeLegalModal('privacy')"><i class="bi bi-x"></i></button>
+      </div>
+      <div class="legal-modal-body">
+        <p>Kebijakan Privasi ini menjelaskan bagaimana <strong>Klasifikasi Baku Lapangan Usaha Indonesia</strong> menangani data Anda.</p>
+
+        <div class="legal-callout"><i class="bi bi-shield-lock"></i> Inti dari kebijakan ini: <strong>Aplikasi tidak memiliki server backend milik pengembang.</strong> Semua data yang Anda unggah atau hasilkan tetap tersimpan di perangkat/browser Anda sendiri. Satu-satunya permintaan jaringan yang dibuat aplikasi adalah saat memeriksa atau mengunduh pembaruan dari repositori publik GitHub <code>mlev99/klasifikasi25</code> via CDN jsDelivr — data ini bersifat publik dan tidak mengandung informasi pribadi Anda.</div>
+
+        <h6 class="sec-title"><span class="sec-num">1</span> Data yang Disimpan secara Lokal</h6>
+        <p>Aplikasi menyimpan data berikut di <strong>localStorage</strong> browser Anda (tidak diunggah ke server pengembang manapun):</p>
+        <ul>
+          <li>File data KBLI dan KBJI yang Anda unggah atau unduh otomatis dari GitHub (dalam format JSON).</li>
+          <li>Riwayat pembelajaran sistem pencarian (scoring engine) dari feedback 👍/👎 Anda.</li>
+          <li>Preferensi tampilan, seperti tema gelap/terang dan status pop-up tips.</li>
+          <li>SHA (hash) file terakhir yang diunduh dari GitHub, untuk mendeteksi pembaruan.</li>
+        </ul>
+
+        <h6 class="sec-title"><span class="sec-num">2</span> Koneksi Jaringan &amp; Pihak Ketiga</h6>
+        <p>Saat perangkat terhubung ke internet, Aplikasi melakukan permintaan jaringan ke:</p>
+        <ul>
+          <li><strong>api.github.com</strong> — untuk memeriksa metadata (SHA dan ukuran) file JSON terbaru di repositori publik <code>mlev99/klasifikasi25</code>. Tidak ada data pribadi Anda yang dikirimkan.</li>
+          <li><strong>cdn.jsdelivr.net</strong> — untuk mengunduh file JSON data klasifikasi (KBLI/KBJI) saat tersedia pembaruan. File ini bersifat publik.</li>
+        </ul>
+        <p>Aplikasi <strong>tidak menggunakan Google Analytics, Facebook Pixel, atau layanan pelacak pihak ketiga lainnya</strong>.</p>
+
+        <h6 class="sec-title"><span class="sec-num">3</span> Data yang TIDAK Dikumpulkan</h6>
+        <ul>
+          <li>Aplikasi tidak mengumpulkan nama, alamat, nomor identitas, atau data pribadi lainnya.</li>
+          <li>Aplikasi tidak melakukan pelacakan (tracking), analitik pihak ketiga, atau pengumpulan data perilaku pengguna.</li>
+          <li>Aplikasi tidak menggunakan cookie untuk keperluan periklanan.</li>
+        </ul>
+
+        <h6 class="sec-title"><span class="sec-num">4</span> Berbagi Data dengan Pihak Ketiga</h6>
+        <p>Aplikasi <strong>tidak membagikan data pribadi apapun</strong> kepada pihak ketiga. Permintaan jaringan ke GitHub API dan jsDelivr CDN hanya mengambil data klasifikasi publik, tanpa mengirimkan informasi identitas Anda.</p>
+
+        <h6 class="sec-title"><span class="sec-num">5</span> Keamanan &amp; Kontrol Data</h6>
+        <p>Karena data tersimpan di localStorage browser, keamanan data bergantung pada keamanan perangkat dan browser Anda. Anda dapat menghapus seluruh data tersimpan kapan saja melalui menu <strong>Pengaturan → Hapus Semua Data Cache</strong>, atau mengelola backup data pembelajaran melalui fitur <strong>Backup &amp; Restore</strong>.</p>
+
+        <h6 class="sec-title"><span class="sec-num">6</span> Berbagi Antar Perangkat</h6>
+        <p>Jika Anda menggunakan fitur Backup (Export) untuk menyimpan data pembelajaran ke file, file tersebut sepenuhnya berada dalam kendali Anda — disimpan, dipindahkan, atau dibagikan sesuai keputusan Anda sendiri.</p>
+
+        <h6 class="sec-title"><span class="sec-num">7</span> Perubahan Kebijakan</h6>
+        <p>Kebijakan ini dapat diperbarui sewaktu-waktu mengikuti perkembangan fitur Aplikasi, termasuk penambahan sumber data atau mekanisme sinkronisasi baru. Perubahan akan tercermin pada tanggal "Terakhir diperbarui" di atas.</p>
+      </div>
+      <div class="legal-modal-foot">
+        <button class="btn-tips-close" onclick="closeLegalModal('privacy')">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE: KBJI -->
+  <div class="page" id="page-kbji">
+    <div id="kbjiStats" class="stat-row" style="display:none"></div>
+    <div class="search-wrap">
+      <i class="bi bi-search"></i>
+      <input class="search-input" id="kbjiSearch" type="text" placeholder="Cari kode atau jabatan KBJI 2014…" oninput="onKbjiSearch(this.value)" />
+    </div>
+    <div class="result-meta" id="kbjiResultMeta"></div>
+    <div id="kbjiTree"></div>
+  </div>
+
+  <!-- PAGE: SETTINGS -->
+  <div class="page" id="page-settings">
+    <!-- App Info -->
+    <div class="settings-card">
+      <h6>Informasi Aplikasi</h6>
+      <div class="info-row"><span class="lbl">Nama Aplikasi</span><span class="val">Klasifikasi Baku Lapangan Usaha Indonesia</span></div>
+      <div class="info-row"><span class="lbl">Pengembang</span><span class="val">Saka Omni Webapps</span></div>
+      <div class="info-row"><span class="lbl">Versi Kode Utama</span><span class="val" id="infoAppVersion">1.1.0</span></div>
+      <div class="info-row"><span class="lbl">Versi KBLI</span><span class="val" id="infoVerKbli">—</span></div>
+      <div class="info-row"><span class="lbl">Versi KBJI</span><span class="val" id="infoVerKbji">—</span></div>
+      <div class="legal-links-row">
+        <button class="btn-legal-link" onclick="openLegalModal('tos')">
+          <i class="bi bi-file-text"></i> Syarat &amp; Ketentuan
+        </button>
+        <button class="btn-legal-link" onclick="openLegalModal('privacy')">
+          <i class="bi bi-shield-check"></i> Kebijakan Privasi
+        </button>
+      </div>
+    </div>
+
+    <!-- Data Status -->
+    <div class="settings-card">
+      <h6>Status Data</h6>
+      <div id="statusKbli" class="file-status">
+        <div class="dot"></div>
+        <div>
+          <div class="name">KBLI</div>
+          <div class="meta">Belum ada data</div>
+        </div>
+      </div>
+      <div id="statusKbji" class="file-status">
+        <div class="dot"></div>
+        <div>
+          <div class="name">KBJI</div>
+          <div class="meta">Belum ada data</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload KBLI -->
+    <div class="settings-card">
+      <h6>Unggah File KBLI</h6>
+      <div class="upload-zone" onclick="document.getElementById('fileKbli').click()" id="zoneKbli">
+        <i class="bi bi-file-earmark-code"></i>
+        <p>Klik atau seret file JSON KBLI ke sini</p>
+        <small>Format: KBLI_2025_lengkap.json</small>
+      </div>
+      <input type="file" id="fileKbli" accept=".json" onchange="loadFile('kbli', this)" />
+    </div>
+
+    <!-- Upload KBJI -->
+    <div class="settings-card">
+      <h6>Unggah File KBJI</h6>
+      <div class="upload-zone" onclick="document.getElementById('fileKbji').click()" id="zoneKbji">
+        <i class="bi bi-file-earmark-code"></i>
+        <p>Klik atau seret file JSON KBJI ke sini</p>
+        <small>Format: KBJI_2014_hierarki.json</small>
+      </div>
+      <input type="file" id="fileKbji" accept=".json" onchange="loadFile('kbji', this)" />
+    </div>
+
+    <!-- GitHub Auto Sync -->
+    <div class="settings-card" id="syncCard">
+      <h6>Sinkronisasi Data dari GitHub</h6>
+      <div class="info-row">
+        <span class="lbl">Status Koneksi</span>
+        <span class="val" id="syncConnStatus"><span style="color:var(--text-muted)">Memeriksa…</span></span>
+      </div>
+      <div class="info-row">
+        <span class="lbl">Versi KBLI di Repo</span>
+        <span class="val" id="syncKbliRemoteVer">—</span>
+      </div>
+      <div class="info-row">
+        <span class="lbl">Versi KBJI di Repo</span>
+        <span class="val" id="syncKbjiRemoteVer">—</span>
+      </div>
+      <div class="info-row">
+        <span class="lbl">Terakhir Dicek</span>
+        <span class="val" id="syncLastChecked">—</span>
+      </div>
+      <div id="syncAlertBox" style="display:none;margin:10px 0 4px"></div>
+      <div class="d-flex gap-2 mt-2">
+        <button class="btn btn-sm btn-outline-primary flex-fill" id="btnSyncCheck" onclick="githubSync.checkNow()">
+          <i class="bi bi-arrow-clockwise me-1"></i> Cek Sekarang
+        </button>
+        <button class="btn btn-sm btn-primary flex-fill" id="btnSyncDownload" onclick="githubSync.downloadAll()" style="display:none">
+          <i class="bi bi-cloud-download me-1"></i> Unduh Semua
+        </button>
+      </div>
+      <small class="text-muted d-block mt-2">Saat online, aplikasi secara otomatis memeriksa pembaruan file JSON di repositori GitHub <code>mlev99/klasifikasi25</code> dan menawarkan pengunduhan jika tersedia versi baru.</small>
+    </div>
+
+    <!-- Reset -->
+    <div class="settings-card">
+      <h6>Kelola Data</h6>
+      <button class="btn btn-sm btn-outline-danger w-100" onclick="clearAllData()">
+        <i class="bi bi-trash me-1"></i> Hapus Semua Data Cache
+      </button>
+    </div>
+
+    <!-- Backup & Restore: Scoring Engine (Learning DB) -->
+    <div class="settings-card">
+      <h6>Backup &amp; Restore Hasil Pembelajaran Pencarian</h6>
+      <div class="info-row">
+        <span class="lbl">Total Query Terpelajari</span>
+        <span class="val" id="infoLearnCount">0</span>
+      </div>
+      <div class="d-flex gap-2 mt-2">
+        <button class="btn btn-sm btn-outline-primary flex-fill" onclick="exportLearnDB()">
+          <i class="bi bi-download me-1"></i> Backup (Export)
+        </button>
+        <button class="btn btn-sm btn-outline-secondary flex-fill" onclick="document.getElementById('fileLearnRestore').click()">
+          <i class="bi bi-upload me-1"></i> Restore (Import)
+        </button>
+      </div>
+      <input type="file" id="fileLearnRestore" accept=".json" style="display:none" onchange="importLearnDB(this)" />
+      <small class="text-muted d-block mt-2">Backup menyimpan skor hasil feedback 👍/👎 pencarian KBLI agar bisa dipulihkan di perangkat/browser lain.</small>
+    </div>
+  </div>
+
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- GITHUB SYNC BANNER -->
+<div class="sync-banner hidden" id="syncBanner">
+  <i class="bi bi-cloud-arrow-down-fill"></i>
+  <div class="sync-banner-text" id="syncBannerText">
+    <strong>Pembaruan Data Tersedia</strong> — File JSON baru ditemukan di GitHub.
+  </div>
+  <button class="btn-sync-banner" onclick="githubSync.downloadAll()">Unduh Sekarang</button>
+  <button class="btn-sync-banner-dismiss" onclick="githubSync.dismissBanner()" title="Tutup">&times;</button>
+</div>
+
+<!-- SYNC PROGRESS OVERLAY -->
+<div class="sync-progress-overlay hidden" id="syncProgressOverlay">
+  <div class="sync-progress-box">
+    <i class="bi bi-cloud-arrow-down-fill" id="syncProgressIcon"></i>
+    <div class="sync-progress-title" id="syncProgressTitle">Mengunduh Data…</div>
+    <div class="sync-progress-sub" id="syncProgressSub">Mohon tunggu, sedang memproses file JSON dari GitHub.</div>
+    <div class="sync-progress-bar-wrap">
+      <div class="sync-progress-bar" id="syncProgressBar" style="width:0%"></div>
+    </div>
+    <div class="sync-progress-file" id="syncProgressFile"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+'use strict';
+
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+const App = {
+  kbli: null,   // parsed KBLI JSON
+  kbji: null,   // parsed KBJI JSON (only 2014 data)
+  kbliMeta: null,
+  kbjiMeta: null,
+  kbliFlat: [],  // flat search index
+  kbjiFlat: [],  // flat search index for KBJI 2014 golongan pokok + sub
+  kbliSmartIdx: null, // extended index for "Cari Usaha" (includes uraian + judul_path)
+  searchTimeout: null,
+};
+
+// ══════════════════════════════════════════════
+//  THEME
+// ══════════════════════════════════════════════
+(function initTheme() {
+  const saved = localStorage.getItem('theme') || 'light';
+  applyTheme(saved);
+})();
+function applyTheme(mode) {
+  document.documentElement.setAttribute('data-theme', mode);
+  const icon = document.getElementById('themeIcon');
+  if (icon) icon.className = mode === 'dark' ? 'bi bi-sun' : 'bi bi-moon';
+  localStorage.setItem('theme', mode);
+}
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  applyTheme(cur === 'dark' ? 'light' : 'dark');
+});
+
+// ══════════════════════════════════════════════
+//  TAB NAVIGATION
+// ══════════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === tab);
+  });
+  document.querySelectorAll('.page').forEach(el => {
+    el.classList.toggle('active', el.id === 'page-' + tab);
+  });
+  if (tab === 'cari') initCariPage();
+  if (tab === 'stats') initStatsPage();
+  closeSidebar();
+}
+
+// ══════════════════════════════════════════════
+//  SIDEBAR (auto-hide, overlay)
+// ══════════════════════════════════════════════
+function toggleSidebar() {
+  const nav = document.getElementById('sidebarNav');
+  if (nav && nav.classList.contains('open')) closeSidebar();
+  else openSidebar();
+}
+function openSidebar() {
+  document.getElementById('sidebarNav').classList.add('open');
+  document.getElementById('sidebarBackdrop').classList.add('open');
+}
+function closeSidebar() {
+  const nav = document.getElementById('sidebarNav');
+  const bd = document.getElementById('sidebarBackdrop');
+  if (nav) nav.classList.remove('open');
+  if (bd) bd.classList.remove('open');
+}
+
+// ══════════════════════════════════════════════
+//  FILE LOADING
+// ══════════════════════════════════════════════
+function loadFile(type, input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (!file.name.endsWith('.json')) { toast('File harus berformat JSON', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (type === 'kbli') processKbli(data, file);
+      else processKbji(data, file);
+    } catch {
+      toast('File JSON tidak valid atau rusak.', 'error');
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+// ── KBLI PROCESSOR ──
+function processKbli(data, file) {
+  if (!data.kategori || !Array.isArray(data.kategori)) {
+    toast('Struktur KBLI tidak dikenali. Pastikan ada kunci "kategori".', 'error');
+    return;
+  }
+  App.kbli = data.kategori;
+  App.kbliMeta = { file: file.name, size: file.size, loaded: new Date().toLocaleString('id-ID') };
+
+  // Build flat search index
+  App.kbliFlat = [];
+  data.kategori.forEach(kat => {
+    App.kbliFlat.push({ level: 'kategori', kode: kat.kode, judul: kat.judul, path: [kat.kode] });
+    (kat.golongan_pokok || []).forEach(gp => {
+      App.kbliFlat.push({ level: 'golongan_pokok', kode: gp.kode, judul: gp.judul, path: [kat.kode, gp.kode] });
+      (gp.golongan || []).forEach(g => {
+        App.kbliFlat.push({ level: 'golongan', kode: g.kode, judul: g.judul, path: [kat.kode, gp.kode, g.kode] });
+        (g.subgolongan || []).forEach(sg => {
+          App.kbliFlat.push({ level: 'subgolongan', kode: sg.kode, judul: sg.judul, path: [kat.kode, gp.kode, g.kode, sg.kode] });
+          (sg.kelompok || []).forEach(k => {
+            App.kbliFlat.push({ level: 'kelompok', kode: k.kode, judul: k.judul, path: [kat.kode, gp.kode, g.kode, sg.kode, k.kode] });
+          });
+        });
+      });
+    });
+  });
+
+  saveCache('kbli_data', data);
+  saveCache('kbli_meta', App.kbliMeta);
+  App.kbliSmartIdx = buildSmartIndex(data.kategori);
+  renderKbli(null);
+  updateSettings();
+  toast('Data KBLI berhasil dimuat ✓');
+}
+
+// ── KBJI PROCESSOR ──
+function processKbji(data, file) {
+  let hierarchy = null;
+
+  // ── FORMAT A: New pre-built hierarki file (golongan_pokok key) ──
+  if (Array.isArray(data.golongan_pokok)) {
+    hierarchy = data.golongan_pokok;
+    App.kbji = hierarchy;
+    App.kbjiMeta = { file: file.name, size: file.size, loaded: new Date().toLocaleString('id-ID'), versi: data.versi || '2014' };
+
+    // Build flat search index — full 4 levels
+    App.kbjiFlat = [];
+    hierarchy.forEach(gp => {
+      App.kbjiFlat.push({ level: 'golongan_pokok', kode: gp.kode, judul: gp.judul });
+      (gp.golongan || []).forEach(gol => {
+        App.kbjiFlat.push({ level: 'golongan', kode: gol.kode, judul: gol.judul });
+        (gol.subgolongan || []).forEach(sub => {
+          App.kbjiFlat.push({ level: 'subgolongan', kode: sub.kode, judul: sub.judul });
+          (sub.kelompok || []).forEach(kel => {
+            App.kbjiFlat.push({ level: 'kelompok', kode: kel.kode, judul: kel.judul });
+          });
+        });
+      });
+    });
+
+    saveCache('kbji_data', { hierarchy, versi: data.versi || '2014' });
+    saveCache('kbji_meta', App.kbjiMeta);
+    renderKbji(null);
+    updateSettings();
+    toast('Data KBJI 2014 berhasil dimuat ✓');
+    return;
+  }
+
+  // ── FORMAT B: Raw source file with "tabel" key ──
+  if (!data.tabel || !Array.isArray(data.tabel)) {
+    toast('Struktur KBJI tidak dikenali. Gunakan file KBJI_2014_hierarki.json.', 'error');
+    return;
+  }
+  const kbji2014Tables = data.tabel.filter(t => t.arah && t.arah.includes('KBJI 2014'));
+  if (!kbji2014Tables.length) {
+    toast('Data KBJI 2014 tidak ditemukan dalam file.', 'error');
+    return;
+  }
+  hierarchy = buildKbjiHierarchyFromTabel(kbji2014Tables);
+  App.kbji = hierarchy;
+  App.kbjiMeta = { file: file.name, size: file.size, loaded: new Date().toLocaleString('id-ID'), versi: '2014' };
+
+  App.kbjiFlat = [];
+  hierarchy.forEach(gp => {
+    App.kbjiFlat.push({ level: 'golongan_pokok', kode: gp.kode, judul: gp.judul });
+    (gp.golongan || []).forEach(gol => {
+      App.kbjiFlat.push({ level: 'golongan', kode: gol.kode, judul: gol.judul });
+    });
+  });
+
+  saveCache('kbji_data', { hierarchy, versi: '2014' });
+  saveCache('kbji_meta', App.kbjiMeta);
+  renderKbji(null);
+  updateSettings();
+  toast('Data KBJI 2014 (tabel) berhasil dimuat ✓');
+}
+
+// Fallback: build from raw tabel format (flat 2-level: GP → Golongan)
+function buildKbjiHierarchyFromTabel(tables) {
+  const rootMap = new Map();
+  tables.forEach(table => {
+    (table.data || []).forEach(row => {
+      (row.konteks || []).forEach(ctx => {
+        if (!rootMap.has(ctx.kode)) {
+          rootMap.set(ctx.kode, { kode: ctx.kode, judul: ctx.judul, golongan: new Map() });
+        }
+        const targetKode = String(row.kode_asal || '');
+        if (targetKode && targetKode !== ctx.kode) {
+          const gp = rootMap.get(ctx.kode);
+          if (!gp.golongan.has(targetKode)) {
+            gp.golongan.set(targetKode, { kode: targetKode, judul: row.judul_tujuan || `Kode ${targetKode}`, subgolongan: [] });
+          }
+        }
+      });
+    });
+  });
+  return Array.from(rootMap.values())
+    .map(gp => ({ kode: gp.kode, judul: gp.judul, golongan: Array.from(gp.golongan.values()).sort((a,b) => a.kode.localeCompare(b.kode, undefined, {numeric:true})) }))
+    .sort((a,b) => a.kode.localeCompare(b.kode, undefined, {numeric:true}));
+}
+
+// ══════════════════════════════════════════════
+//  URAIAN → HTML: structured paragraphs + linkify
+// ══════════════════════════════════════════════
+// Converts raw uraian text into structured HTML:
+//  - Sections split by keywords: "mencakup", "tidak mencakup", "golongan pokok ini mencakup", etc.
+//  - Dash items (– or -) within a section become individual <li> lines
+//  - Cross-references "lihat X XXXX" become clickable links
+
+const SECTION_KEYWORDS = [
+  /golongan\s+pokok\s+ini\s+tidak\s+mencakup/i,
+  /subgolongan\s+ini\s+tidak\s+mencakup/i,
+  /golongan\s+ini\s+tidak\s+mencakup/i,
+  /kelompok\s+ini\s+tidak\s+mencakup/i,
+  /kategori\s+ini\s+tidak\s+mencakup/i,
+  /tidak\s+mencakup/i,
+  /golongan\s+pokok\s+ini\s+juga\s+mencakup/i,
+  /golongan\s+pokok\s+ini\s+mencakup/i,
+  /subgolongan\s+ini\s+juga\s+mencakup/i,
+  /subgolongan\s+ini\s+mencakup/i,
+  /golongan\s+ini\s+juga\s+mencakup/i,
+  /golongan\s+ini\s+mencakup/i,
+  /kelompok\s+ini\s+juga\s+mencakup/i,
+  /kelompok\s+ini\s+mencakup/i,
+  /kategori\s+ini\s+juga\s+mencakup/i,
+  /kategori\s+ini\s+mencakup/i,
+  /penyiapan\s+produk/i,
+];
+
+function linkifyRefs(safe) {
+  const patterns = [
+    { re: /\blihat\s+kelompok\s+([0-9]{5})\b/gi,         level: 'kelompok',      prefix: 'k-'   },
+    { re: /\blihat\s+subgolongan\s+([0-9]{4})\b/gi,      level: 'subgolongan',   prefix: 'sg-'  },
+    { re: /\blihat\s+golongan\s+pokok\s+([0-9]{2})\b/gi, level: 'golongan_pokok',prefix: 'gp-'  },
+    { re: /\blihat\s+golongan\s+([0-9]{3})\b/gi,         level: 'golongan',      prefix: 'g-'   },
+    { re: /\blihat\s+kategori\s+([A-Z])\b/gi,            level: 'kategori',      prefix: 'kat-' },
+  ];
+  patterns.forEach(({ re, level, prefix }) => {
+    safe = safe.replace(re, (match, code) => {
+      const nodeId = prefix + code;
+      const labelPart = match.slice(0, match.lastIndexOf(code)).trimEnd();
+      return `${labelPart} <a class="ref-link" href="javascript:void(0)" onclick="navigateTo('${nodeId}','${level}')" title="Buka ${level} ${code}">${code}</a>`;
+    });
+  });
+  return safe;
+}
+
+function splitIntoSections(text) {
+  // Find all split points (positions of section keywords)
+  const splitPoints = []; // { index, matchLen }
+  for (const kw of SECTION_KEYWORDS) {
+    const re = new RegExp(kw.source, 'gi');
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      splitPoints.push({ index: m.index, matchLen: m[0].length });
+    }
+  }
+  if (!splitPoints.length) return [{ header: null, body: text.trim() }];
+
+  // Sort by position, dedupe overlapping
+  splitPoints.sort((a, b) => a.index - b.index);
+  const deduped = [splitPoints[0]];
+  for (let i = 1; i < splitPoints.length; i++) {
+    const prev = deduped[deduped.length - 1];
+    if (splitPoints[i].index >= prev.index + prev.matchLen) {
+      deduped.push(splitPoints[i]);
+    }
+  }
+
+  const sections = [];
+  // First section: text before first keyword
+  const firstKw = deduped[0];
+  const preText = text.slice(0, firstKw.index).trim();
+  if (preText) sections.push({ header: null, body: preText });
+
+  for (let i = 0; i < deduped.length; i++) {
+    const start = deduped[i].index;
+    const end = i + 1 < deduped.length ? deduped[i + 1].index : text.length;
+    const chunk = text.slice(start, end).trim();
+    // Extract the keyword as header, rest as body
+    const header = text.slice(start, start + deduped[i].matchLen);
+    const body = chunk.slice(deduped[i].matchLen).replace(/^\s*[:–\-]\s*/, '').trim();
+    sections.push({ header, body });
+  }
+  return sections;
+}
+
+function renderSectionBody(body) {
+  if (!body) return '';
+  // Split on dash items: lines/segments starting with – or - (possibly after semicolon/newline)
+  // Dash items may appear after a colon, or be separated by ";" within a run
+  // Strategy: split on patterns like "; –", "; -", or "– " at start of a segment
+  const dashSplitRe = /\s*[;]\s*(?=[–\-]\s)/g;
+  const parts = body.split(dashSplitRe).map(s => s.trim()).filter(Boolean);
+
+  if (parts.length <= 1) {
+    // No dash list — check if the single part itself starts with a dash
+    const single = parts[0] || body.trim();
+    if (/^[–\-]/.test(single)) {
+      // It's just one dash item
+      const itemText = single.replace(/^[–\-]\s*/, '').trim();
+      return `<ul class="uraian-list"><li>${linkifyRefs(escHtml(itemText))}</li></ul>`;
+    }
+    return `<p class="uraian-para">${linkifyRefs(escHtml(single))}</p>`;
+  }
+
+  // Multiple parts — first part may be an intro sentence, rest are dash items
+  const firstPart = parts[0];
+  const isFirstDash = /^[–\-]/.test(firstPart);
+
+  let html = '';
+  if (!isFirstDash) {
+    // First part is intro text, rest are list items
+    html += `<p class="uraian-para">${linkifyRefs(escHtml(firstPart))}</p>`;
+    const listItems = parts.slice(1);
+    html += `<ul class="uraian-list">${listItems.map(item => {
+      const clean = item.replace(/^[–\-]\s*/, '').trim();
+      return `<li>${linkifyRefs(escHtml(clean))}</li>`;
+    }).join('')}</ul>`;
+  } else {
+    // All are list items
+    html += `<ul class="uraian-list">${parts.map(item => {
+      const clean = item.replace(/^[–\-]\s*/, '').trim();
+      return `<li>${linkifyRefs(escHtml(clean))}</li>`;
+    }).join('')}</ul>`;
+  }
+  return html;
+}
+
+function uraianToHtml(text) {
+  if (!text) return '';
+
+  // Normalize line breaks and excessive whitespace
+  const normalized = text.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
+
+  const sections = splitIntoSections(normalized);
+
+  return sections.map(({ header, body }) => {
+    const headerHtml = header
+      ? `<span class="uraian-section-label">${escHtml(header.trim())}</span>`
+      : '';
+    const bodyHtml = renderSectionBody(body);
+    if (header) {
+      return `<div class="uraian-section">${headerHtml}${bodyHtml}</div>`;
+    }
+    return bodyHtml;
+  }).join('');
+}
+
+// Navigate to a node: switch to KBLI tab, expand parents, scroll to node
+function navigateTo(nodeId, level) {
+  // Always switch to KBLI tab
+  switchTab('kbli');
+  // Clear search so full tree is rendered
+  const searchEl = document.getElementById('kbliSearch');
+  if (searchEl && searchEl.value) {
+    searchEl.value = '';
+    renderKbli(null);
+  }
+  // After render, expand path and scroll
+  setTimeout(() => {
+    const el = document.getElementById(nodeId);
+    if (!el) return;
+    // Walk up DOM expanding parent tree-nodes
+    let parent = el.parentElement;
+    while (parent) {
+      if (parent.classList && (
+        parent.classList.contains('tree-node') ||
+        parent.classList.contains('tree-node-2') ||
+        parent.classList.contains('tree-node-3')
+      )) {
+        parent.classList.add('open');
+      }
+      parent = parent.parentElement;
+    }
+    // Open the node itself if it's a tree-node
+    if (el.classList.contains('tree-node') ||
+        el.classList.contains('tree-node-2') ||
+        el.classList.contains('tree-node-3')) {
+      el.classList.add('open');
+    }
+    // Scroll into view
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Flash highlight
+    el.style.transition = 'box-shadow .2s';
+    el.style.boxShadow = '0 0 0 3px #2563EB88';
+    setTimeout(() => { el.style.boxShadow = ''; }, 1400);
+  }, 80);
+}
+
+// ══════════════════════════════════════════════
+//  KBLI RENDER
+// ══════════════════════════════════════════════
+function renderKbli(query) {
+  const container = document.getElementById('kbliTree');
+  const metaEl = document.getElementById('kbliResultMeta');
+  const statsEl = document.getElementById('kbliStats');
+
+  if (!App.kbli) {
+    container.innerHTML = emptyState('bi-grid-3x3-gap', 'Belum ada data KBLI', 'Unggah file JSON di menu Pengaturan');
+    metaEl.textContent = '';
+    statsEl.style.display = 'none';
+    return;
+  }
+
+  // Stats
+  const cats = App.kbli.length;
+  const gps = App.kbli.reduce((s,k) => s + (k.golongan_pokok||[]).length, 0);
+  const golongan = App.kbliFlat.filter(i => i.level === 'golongan').length;
+  const kelompok = App.kbliFlat.filter(i => i.level === 'kelompok').length;
+  statsEl.style.display = 'grid';
+  statsEl.innerHTML = `
+    <div class="stat-card"><div class="stat-val">${cats}</div><div class="stat-lbl">Kategori</div></div>
+    <div class="stat-card"><div class="stat-val">${gps}</div><div class="stat-lbl">Gol. Pokok</div></div>
+    <div class="stat-card"><div class="stat-val">${golongan}</div><div class="stat-lbl">Golongan</div></div>
+    <div class="stat-card"><div class="stat-val">${kelompok}</div><div class="stat-lbl">Kelompok</div></div>
+  `;
+
+  const q = (query || '').trim().toLowerCase();
+
+  if (q) {
+    // Multi-word search: every word/token must appear somewhere in kode or judul
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const results = App.kbliFlat.filter(item => {
+      const hay = (item.kode + ' ' + item.judul).toLowerCase();
+      return tokens.every(t => hay.includes(t));
+    });
+    metaEl.textContent = `${results.length} hasil untuk "${query}"`;
+    container.innerHTML = results.length
+      ? results.map(item => renderFlatKbliItem(item, tokens)).join('')
+      : `<div class="empty-state"><i class="bi bi-search"></i><p>Tidak ada hasil untuk <strong>"${escHtml(query)}"</strong></p><small>Coba kata kunci lain</small></div>`;
+    return;
+  }
+
+  metaEl.textContent = '';
+  container.innerHTML = App.kbli.map(kat => renderKategori(kat)).join('');
+}
+
+function renderKategori(kat) {
+  const id = 'kat-' + kat.kode;
+  const gps = (kat.golongan_pokok || []).map(gp => renderGolonganPokok(gp)).join('');
+  return `<div class="tree-node" id="${id}">
+    <div class="tree-header" onclick="toggleNode('${id}')">
+      <span class="tree-code">${escHtml(kat.kode)}</span>
+      <span class="tree-title">${escHtml(kat.judul)}</span>
+      <i class="bi bi-chevron-right tree-toggle"></i>
+    </div>
+    <div class="tree-body">
+      ${kat.uraian ? `<div class="tree-desc">${uraianToHtml(kat.uraian)}</div>` : ''}
+      <div class="tree-children">${gps}</div>
+    </div>
+  </div>`;
+}
+
+function renderGolonganPokok(gp) {
+  const id = 'gp-' + gp.kode;
+  const golongan = (gp.golongan || []).map(g => renderGolongan(g)).join('');
+  return `<div class="tree-node-2" id="${id}">
+    <div class="tree-header-2" onclick="toggleNode('${id}')">
+      <span class="tree-code-2">${escHtml(gp.kode)}</span>
+      <span class="tree-title-2">${escHtml(gp.judul)}</span>
+      <i class="bi bi-chevron-right tree-toggle-2"></i>
+    </div>
+    <div class="tree-body-2">
+      ${gp.uraian ? `<div class="tree-desc-2">${uraianToHtml(gp.uraian)}</div>` : ''}
+      <div class="tree-children-2">${golongan}</div>
+    </div>
+  </div>`;
+}
+
+function renderGolongan(g) {
+  const id = 'g-' + g.kode;
+  const subs = (g.subgolongan || []).map(sg => renderSubgolongan(sg)).join('');
+  return `<div class="tree-node-3" id="${id}">
+    <div class="tree-header-3" onclick="toggleNode('${id}')">
+      <span class="tree-code-3">${escHtml(g.kode)}</span>
+      <span class="tree-title-3">${escHtml(g.judul)}</span>
+      <i class="bi bi-chevron-right tree-toggle-3"></i>
+    </div>
+    <div class="tree-body-3">
+      ${g.uraian ? `<div class="tree-desc-3">${uraianToHtml(g.uraian)}</div>` : ''}
+      <div class="tree-children-3">${subs}</div>
+    </div>
+  </div>`;
+}
+
+function renderSubgolongan(sg) {
+  const id = 'sg-' + sg.kode;
+  const kelompok = (sg.kelompok || []).map(k => renderKelompok(k)).join('');
+  return `<div class="tree-node-3" id="${id}">
+    <div class="tree-header-3" onclick="toggleNode('${id}')">
+      <span class="tree-code-3">${escHtml(sg.kode)}</span>
+      <span class="tree-title-3">${escHtml(sg.judul)}</span>
+      <i class="bi bi-chevron-right tree-toggle-3"></i>
+    </div>
+    <div class="tree-body-3">
+      ${sg.uraian ? `<div class="tree-desc-3">${uraianToHtml(sg.uraian)}</div>` : ''}
+      <div class="tree-children-3">${kelompok}</div>
+    </div>
+  </div>`;
+}
+
+function renderKelompok(k) {
+  const id = 'k-' + k.kode;
+  return `<div class="leaf-item" id="${id}" onclick="toggleLeaf('${id}')">
+    <span class="leaf-code">${escHtml(k.kode)}</span>
+    <span class="leaf-title">${escHtml(k.judul)}</span>
+    <i class="bi bi-chevron-down" style="font-size:11px;color:var(--text-muted);flex-shrink:0;transition:transform .15s"></i>
+    <div class="leaf-desc" id="desc-${id}" onclick="event.stopPropagation()">${k.uraian ? uraianToHtml(k.uraian) : '<em>Tidak ada uraian</em>'}</div>
+  </div>`;
+}
+
+function toggleLeaf(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const desc = document.getElementById('desc-' + id);
+  const icon = el.querySelector('.bi-chevron-down, .bi-chevron-up');
+  el.classList.toggle('open');
+  if (desc) desc.classList.toggle('open');
+  if (icon) icon.className = el.classList.contains('open') ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
+  if (el.classList.contains('open')) {
+    el.style.flexWrap = 'wrap';
+    if (desc) { desc.style.width='100%'; desc.style.marginTop='6px'; }
+  } else {
+    el.style.flexWrap = '';
+    if (desc) { desc.style.width=''; desc.style.marginTop=''; }
+  }
+}
+
+function renderFlatKbliItem(item, tokens) {
+  const levelLabel = { kategori:'Kategori', golongan_pokok:'Golongan Pokok', golongan:'Golongan', subgolongan:'Subgolongan', kelompok:'Kelompok' };
+  return `<div class="leaf-item" style="margin-bottom:6px;flex-wrap:wrap" onclick="navigateTo('${getLevelPrefix(item.level)+item.kode}','${item.level}')">
+    <span class="leaf-code" style="background:var(--brand-primary-soft);color:var(--brand-primary)">${hlTokens(item.kode, tokens)}</span>
+    <span class="leaf-title" style="flex:1">${hlTokens(item.judul, tokens)}</span>
+    <span style="font-size:10px;color:var(--text-muted);width:100%;padding-top:3px">${levelLabel[item.level] || item.level} &rsaquo; <span style="color:var(--brand-primary);font-weight:600">${escHtml(item.kode)}</span></span>
+  </div>`;
+}
+
+function getLevelPrefix(level) {
+  const map = { kategori:'kat-', golongan_pokok:'gp-', golongan:'g-', subgolongan:'sg-', kelompok:'k-' };
+  return map[level] || '';
+}
+
+// ══════════════════════════════════════════════
+//  KBJI RENDER
+// ══════════════════════════════════════════════
+function renderKbji(query) {
+  const container = document.getElementById('kbjiTree');
+  const metaEl = document.getElementById('kbjiResultMeta');
+  const statsEl = document.getElementById('kbjiStats');
+
+  if (!App.kbji) {
+    container.innerHTML = emptyState('bi-person-badge', 'Belum ada data KBJI', 'Unggah file KBJI_2014_hierarki.json di menu Pengaturan');
+    metaEl.textContent = '';
+    statsEl.style.display = 'none';
+    return;
+  }
+
+  const totalGP  = App.kbji.length;
+  const totalGol = App.kbji.reduce((s,g) => s + (g.golongan||[]).length, 0);
+  const totalSub = App.kbjiFlat.filter(i => i.level === 'subgolongan').length;
+  const totalKel = App.kbjiFlat.filter(i => i.level === 'kelompok').length;
+
+  statsEl.style.display = 'grid';
+  statsEl.innerHTML = `
+    <div class="stat-card"><div class="stat-val">${totalGP}</div><div class="stat-lbl">Gol. Pokok</div></div>
+    <div class="stat-card"><div class="stat-val">${totalGol}</div><div class="stat-lbl">Golongan</div></div>
+    <div class="stat-card"><div class="stat-val">${totalSub || totalGol}</div><div class="stat-lbl">Subgolongan</div></div>
+    <div class="stat-card"><div class="stat-val">${totalKel || '—'}</div><div class="stat-lbl">Kelompok</div></div>
+  `;
+
+  const q = (query || '').trim().toLowerCase();
+
+  if (q) {
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const results = App.kbjiFlat.filter(i => {
+      const hay = (i.kode + ' ' + i.judul).toLowerCase();
+      return tokens.every(t => hay.includes(t));
+    });
+    metaEl.textContent = `${results.length} hasil untuk "${query}"`;
+    const levelLabel = { golongan_pokok:'Golongan Pokok', golongan:'Golongan', subgolongan:'Subgolongan', kelompok:'Kelompok/Jabatan' };
+    container.innerHTML = results.length
+      ? results.map(item => `
+          <div class="leaf-item" style="margin-bottom:6px;flex-wrap:wrap">
+            <span class="leaf-code" style="background:#F3F0FF;color:#7C3AED">${hlTokens(item.kode, tokens)}</span>
+            <span class="leaf-title" style="flex:1">${hlTokens(item.judul, tokens)}</span>
+            <span style="font-size:10px;color:var(--text-muted);width:100%;padding-top:3px">${levelLabel[item.level] || item.level}</span>
+          </div>`).join('')
+      : `<div class="empty-state"><i class="bi bi-search"></i><p>Tidak ada hasil untuk <strong>"${escHtml(query)}"</strong></p></div>`;
+    return;
+  }
+
+  metaEl.textContent = '';
+  container.innerHTML = App.kbji.map(gp => renderKbjiGP(gp)).join('');
+}
+
+// Level 1 – Golongan Pokok
+function renderKbjiGP(gp) {
+  const id = 'kbji-gp-' + gp.kode;
+  const children = (gp.golongan || []).map(gol => renderKbjiGolongan(gol)).join('');
+  const count = (gp.golongan || []).length;
+  return `<div class="tree-node" id="${id}">
+    <div class="tree-header" onclick="toggleNode('${id}')">
+      <span class="tree-code kbji">${escHtml(gp.kode)}</span>
+      <span class="tree-title">${escHtml(gp.judul)}</span>
+      <span style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-top:2px">${count} gol</span>
+      <i class="bi bi-chevron-right tree-toggle"></i>
+    </div>
+    <div class="tree-body">
+      <div class="tree-children">${children || '<div style="padding:8px;font-size:12px;color:var(--text-muted)">Tidak ada data</div>'}</div>
+    </div>
+  </div>`;
+}
+
+// Level 2 – Golongan
+function renderKbjiGolongan(gol) {
+  const id = 'kbji-gol-' + gol.kode;
+  const hasSub = (gol.subgolongan || []).length > 0;
+  const children = hasSub
+    ? (gol.subgolongan || []).map(sub => renderKbjiSubgolongan(sub)).join('')
+    : (gol.kelompok || []).map(kel => renderKbjiKelompok(kel)).join('');
+  const childCount = hasSub ? (gol.subgolongan||[]).length : (gol.kelompok||[]).length;
+  const childLabel = hasSub ? 'sub' : 'jabatan';
+  return `<div class="tree-node-2" id="${id}">
+    <div class="tree-header-2" onclick="toggleNode('${id}')">
+      <span class="tree-code-2" style="background:#F3F0FF;color:#7C3AED">${escHtml(gol.kode)}</span>
+      <span class="tree-title-2">${escHtml(gol.judul)}</span>
+      <span style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-top:1px">${childCount} ${childLabel}</span>
+      <i class="bi bi-chevron-right tree-toggle-2"></i>
+    </div>
+    <div class="tree-body-2">
+      <div class="tree-children-2">${children || '<div style="padding:6px;font-size:11px;color:var(--text-muted)">Tidak ada data</div>'}</div>
+    </div>
+  </div>`;
+}
+
+// Level 3 – Subgolongan
+function renderKbjiSubgolongan(sub) {
+  const id = 'kbji-sub-' + sub.kode;
+  const kelompokList = (sub.kelompok || []);
+  const children = kelompokList.map(kel => renderKbjiKelompok(kel)).join('');
+  return `<div class="tree-node-3" id="${id}">
+    <div class="tree-header-3" onclick="toggleNode('${id}')">
+      <span class="tree-code-3" style="background:#F3F0FF;color:#7C3AED;opacity:.8">${escHtml(sub.kode)}</span>
+      <span class="tree-title-3">${escHtml(sub.judul)}</span>
+      <span style="font-size:10px;color:var(--text-muted);flex-shrink:0">${kelompokList.length} jabatan</span>
+      <i class="bi bi-chevron-right tree-toggle-3"></i>
+    </div>
+    <div class="tree-body-3">
+      <div class="tree-children-3">${children || '<div style="padding:6px;font-size:11px;color:var(--text-muted)">Tidak ada jabatan</div>'}</div>
+    </div>
+  </div>`;
+}
+
+// Level 4 – Kelompok / Jabatan (leaf)
+function renderKbjiKelompok(kel) {
+  return `<div class="leaf-item" style="flex-wrap:wrap">
+    <span class="leaf-code" style="background:#F3F0FF;color:#7C3AED">${escHtml(kel.kode)}</span>
+    <span class="leaf-title">${escHtml(kel.judul)}</span>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════
+//  SEARCH DEBOUNCE
+// ══════════════════════════════════════════════
+function onKbliSearch(val) {
+  clearTimeout(App.searchTimeout);
+  App.searchTimeout = setTimeout(() => renderKbli(val), 200);
+}
+function onKbjiSearch(val) {
+  clearTimeout(App.searchTimeout);
+  App.searchTimeout = setTimeout(() => renderKbji(val), 200);
+}
+
+// ══════════════════════════════════════════════
+//  SMART SEARCH ENGINE — "Cari Usaha"
+// ══════════════════════════════════════════════
+
+// ══════════════════════════════════════════════
+//  BUSINESS TYPE CLASSIFIER
+//  Mendeteksi tipe usaha dari kata-kata kunci
+//  untuk menentukan sektor KBLI yang tepat.
+//
+//  5 konteks utama sesuai KBLI:
+//  - jasa       : aktivitas yg menjual tenaga/keahlian (bengkel, laundry, salon, dll)
+//  - produksi   : mengolah bahan mentah → produk jadi (industri, pabrik, manufaktur)
+//  - perdagangan: membeli barang jadi dan menjual kembali tanpa mengolah
+//  - pertanian  : menghasilkan komoditas dari alam (tani, ternak, perikanan, kehutanan)
+//  - pendukung  : aktivitas penunjang bisnis (konsultan, kantor, admin, logistik)
+// ══════════════════════════════════════════════
+
+// ── KATA SINYAL PER KONTEKS ──
+// Digunakan oleh detectQueryContext()
+const CONTEXT_SIGNALS = {
+
+  // ── JASA: menjual jasa / keahlian / tenaga, tidak memproduksi barang ──
+  jasa: [
+    // Servis & Reparasi
+    'bengkel','servis','reparasi','perbaikan','pemeliharaan','perawatan',
+    'tune up','ganti oli','tambal ban','las','poles','service center',
+    // Kebersihan & Laundry
+    'laundry','binatu','cuci','setrika','dry clean','kebersihan','cleaning',
+    'cuci motor','cuci mobil','cuci baju','cuci pakaian','cuci sepatu',
+    // Perawatan tubuh & kecantikan
+    'salon','barber','potong rambut','cukur','spa','pijat','refleksi',
+    'facial','manicure','pedicure','makeup','tata rias','kecantikan',
+    'tukang cukur','pangkas rambut','barbershop',
+    // Kesehatan (jasa)
+    'dokter','bidan','perawat','fisioterapi','terapi','akupunktur',
+    'klinik','praktik','jasa medis',
+    // Pendidikan (jasa)
+    'les','kursus','bimbel','bimbingan belajar','pelatihan','seminar',
+    'workshop','privat','guru privat','pengajar',
+    // Transportasi & Kurir
+    'ojek','taksi','antar','jemput','carter','sewa kendaraan','rental',
+    'ekspedisi','kurir','pengiriman','titipan kilat','cargo',
+    // Konstruksi jasa
+    'tukang','pasang','instalasi','wiring','plumbing','pipa','listrik rumah',
+    // Keuangan jasa
+    'transfer','pengiriman uang','money changer','penukaran uang',
+    'akuntan','audit','pajak','konsultan keuangan',
+    // Event & kreatif
+    'fotografer','videografer','foto','kamera','studio foto','studio rekam',
+    'event organizer','wedding organizer','dekorasi',
+    // Umum
+    'jasa','layanan','service','pembuatan','pengerjaan','pengurusan',
+  ],
+
+  // ── PRODUKSI: mengolah/memproses bahan baku menjadi produk baru ──
+  produksi: [
+    // Kata kunci industri
+    'pabrik','industri','manufaktur','produksi','pengolahan','pengerjaan',
+    'konveksi','garmen','pencelupan','pemintalan','penenunan',
+    // Makanan & minuman proses
+    'industri makanan','industri minuman','pengolahan makanan','pengolahan ikan',
+    'pengolahan daging','pengolahan susu','pabrik tahu','pabrik tempe',
+    'pabrik roti','pabrik kue','pabrik mie','pabrik kerupuk','pabrik keripik',
+    'pabrik gula','pabrik minyak','penggilingan','penyulingan','fermentasi',
+    'memasak untuk dijual dalam kemasan','pengemasan','packaging produk',
+    // Kayu & bangunan
+    'penggergajian','mebel','furniture kayu','produksi kayu','industri kayu',
+    'industri semen','industri bata','industri genteng','industri keramik',
+    // Logam & mesin
+    'industri logam','pabrik besi','pengecoran','industri mesin',
+    'pabrik alat','industri peralatan','bubut','tempa','stamping',
+    // Kimia & farmasi
+    'industri kimia','pabrik obat','industri farmasi','industri plastik',
+    'pabrik cat','industri sabun','industri kosmetik','industri pupuk',
+    // Tekstil & pakaian
+    'jahit massal','produksi pakaian','pabrik kain','pabrik benang',
+    // Lainnya
+    'percetakan','cetak','sablon massal','penerbitan','industri kertas',
+    'industri kulit','industri karet','industri elektronik','rakit',
+    'proses','olah','buat','bikin','produk','kerajinan massal',
+  ],
+
+  // ── PERDAGANGAN: beli barang jadi → jual kembali tanpa mengolah ──
+  perdagangan: [
+    // Kata aktif jual-beli
+    'jual','jualan','dagang','berdagang','beli','belikan','reseller',
+    'dropship','dropshipper','stokis','agen','sub agen',
+    // Tipe toko
+    'toko','warung','kios','lapak','counter','booth','stand','gerai',
+    'minimarket','supermarket','hypermarket','swalayan','department store',
+    'pasar','bazaar','bazar','pameran','expo',
+    // Perdagangan besar
+    'grosir','wholesaler','distributor','supplier','importir','eksportir',
+    'perdagangan besar','agen tunggal','sole agent',
+    // Online
+    'toko online','online shop','jualan online','e-commerce','marketplace',
+    'tokopedia','shopee','lazada','bukalapak','tiktok shop',
+    // Komoditas spesifik tanpa produksi
+    'jual baju','jual makanan','jual buah','jual sayur','jual sembako',
+    'jual alat','jual perabot','jual elektronik','jual hp','jual motor',
+    'jual mobil','jual tanah','jual rumah (makelar)','jual bensin',
+    // Kata bantu
+    'eceran','retail','perdagangan',
+  ],
+
+  // ── PERTANIAN: budidaya / menghasilkan dari alam ──
+  pertanian: [
+    // Tanaman
+    'pertanian','bercocok tanam','tanam','kebun','ladang','sawah','tegalan',
+    'petani','budidaya tanaman','hortikultura','perkebunan',
+    'padi','jagung','singkong','ubi','ketela','kedelai','kacang',
+    'sayuran','buah buahan','bawang','cabai','tomat','wortel',
+    'sawit','karet','kakao','kopi','tebu','tembakau','vanili',
+    'tanaman hias','bibit tanaman','pembibitan','nursery',
+    // Peternakan
+    'ternak','peternakan','budi daya ternak','kandang','pakan ternak',
+    'sapi','kambing','domba','babi','kerbau','kuda',
+    'ayam','bebek','itik','unggas','burung','kelinci',
+    'susu sapi','telur ayam','daging ternak',
+    // Perikanan & kelautan
+    'ikan','nelayan','tangkap ikan','tambak','kolam ikan','karamba',
+    'udang','bandeng','lele','nila','gurame','kerapu','kakap',
+    'perikanan','budi daya ikan','aquaculture','marikultur',
+    'rumput laut','kerang','kepiting','rajungan',
+    // Kehutanan
+    'hutan','kayu hutan','rotan','bambu','kehutanan','penebangan',
+    'hasil hutan','getah','damar',
+    // Tambang/galian (primer)
+    'tambang','pertambangan','galian','pasir','batu','tanah urug',
+    'batu bara','nikel','emas tambang','bauksit','timah',
+    // ── Penegasan presisi (training): varian ejaan budidaya/ternak ──
+    // agar query seperti "budidaya lele", "pembudidayaan ikan",
+    // "ternak ayam", "peternakan sapi" terdeteksi kuat sebagai konteks
+    // pertanian/peternakan/perikanan, bukan dagang eceran hasil panennya.
+    'budidaya','pembudidayaan','membudidayakan','budi daya',
+    'budidaya ikan','budidaya lele','budidaya udang','budidaya ayam',
+    'budidaya sayur','budidaya tanaman','pembudidayaan ikan',
+    'ternak ayam','ternak sapi','ternak kambing','ternak bebek',
+    'peternakan ayam','peternakan sapi','peternakan kambing',
+    'usaha ternak','usaha peternakan','beternak',
+  ],
+
+  // ── PENDUKUNG: aktivitas penunjang bisnis & administrasi ──
+  pendukung: [
+    // Profesional
+    'konsultan','konsultasi','advisory','advisor','notaris','pengacara',
+    'pengacara','lawyer','hukum','akuntan','auditor','aktuaris',
+    'arsitek','insinyur','surveyor','penilai',
+    // IT & Digital
+    'software','aplikasi','programming','developer','web developer',
+    'desain grafis','animasi','ui ux','data analyst','cloud','hosting',
+    'jaringan','network','cyber security','it support',
+    // Logistik & Gudang
+    'gudang','warehousing','pergudangan','forwarder','freight',
+    'bongkar muat','pelabuhan','logistik',
+    // Perkantoran
+    'kantor','sekretaris','administrasi','resepsionis','call center',
+    'sumber daya manusia','rekrutmen','headhunter','outsourcing',
+    // Keuangan lembaga
+    'bank','bank umum','bpr','koperasi simpan pinjam','ksp','fintech',
+    'asuransi','multifinance','leasing','modal ventura','sekuritas',
+    'pegadaian','dana pensiun','investasi reksadana',
+    // Properti & sewa aset
+    'sewa','persewaan','rental kendaraan','sewa gedung','sewa kantor',
+    'kos kosan','kost','sewa kamar','penginapan','hotel','motel',
+    'real estat','broker properti','agen properti',
+    // Media & Komunikasi
+    'media','televisi','radio','koran','majalah','portal berita',
+    'periklanan','iklan','reklame','promosi','marketing',
+    // Penelitian & Pengembangan
+    'riset','penelitian','laboratorium uji','pengujian','sertifikasi',
+    'inspeksi','kalibrasi',
+  ],
+};
+
+// ── ALIAS DICTIONARY ──
+// Kata sehari-hari → [term KBLI yang relevan]
+// Digunakan untuk memperluas query sebelum matching
+const ALIAS_DICT = {
+
+  // ══════════════════════════════
+  //  JASA — Servis & Reparasi
+  // ══════════════════════════════
+  'bengkel motor'       : ['reparasi sepeda motor','jasa reparasi kendaraan bermotor roda dua','perawatan sepeda motor'],
+  'bengkel sepeda motor': ['reparasi sepeda motor','bengkel kendaraan bermotor roda dua'],
+  'bengkel mobil'       : ['reparasi kendaraan bermotor roda empat','bengkel mobil','jasa reparasi kendaraan'],
+  'bengkel'             : ['reparasi kendaraan bermotor','jasa reparasi mesin','bengkel kendaraan','perawatan kendaraan'],
+  'bengkel las'         : ['jasa pengelasan','industri barang logam','reparasi mesin','jasa las'],
+  'tune up'             : ['reparasi kendaraan bermotor','perawatan kendaraan'],
+  'ganti oli'           : ['reparasi kendaraan bermotor','jasa perawatan kendaraan'],
+  'tambal ban'          : ['reparasi kendaraan bermotor roda dua','jasa vulkanisir','tambal ban'],
+  'vulkanisir'          : ['jasa vulkanisir ban','reparasi kendaraan bermotor'],
+  'servis hp'           : ['reparasi peralatan komunikasi','reparasi telepon genggam','jasa reparasi elektronik'],
+  'servis ponsel'       : ['reparasi telepon genggam','jasa reparasi peralatan elektronik'],
+  'servis elektronik'   : ['reparasi peralatan elektronik','jasa reparasi peralatan rumah tangga'],
+  'servis ac'           : ['reparasi peralatan rumah tangga','jasa servis ac','instalasi ac'],
+  'servis kulkas'       : ['reparasi peralatan rumah tangga','jasa servis peralatan elektronik'],
+  'reparasi'            : ['reparasi','jasa perbaikan','jasa reparasi'],
+
+  // ══════════════════════════════
+  //  JASA — Kebersihan & Laundry
+  // ══════════════════════════════
+  'laundry'          : ['jasa binatu','jasa pencucian pakaian','laundry kiloan','jasa laundri'],
+  'binatu'           : ['jasa binatu','jasa pencucian pakaian','laundri'],
+  'cuci pakaian'     : ['jasa binatu','jasa pencucian pakaian'],
+  'cuci baju'        : ['jasa binatu','jasa pencucian pakaian'],
+  'dry clean'        : ['jasa binatu','dry cleaning','pencucian kering'],
+  'cuci motor'       : ['jasa pencucian kendaraan bermotor','cuci kendaraan','car wash'],
+  'cuci mobil'       : ['jasa pencucian kendaraan bermotor','car wash','cuci kendaraan'],
+  'car wash'         : ['jasa pencucian kendaraan bermotor','car wash'],
+  'jasa kebersihan'  : ['jasa kebersihan gedung','cleaning service','jasa kebersihan'],
+  'cleaning service' : ['jasa kebersihan gedung','jasa kebersihan','cleaning service'],
+  'office boy'       : ['jasa kebersihan gedung','jasa kebersihan'],
+
+  // ══════════════════════════════
+  //  JASA — Kecantikan & Perawatan
+  // ══════════════════════════════
+  'salon'          : ['jasa perawatan rambut','salon kecantikan','jasa kecantikan','potong rambut'],
+  'barbershop'     : ['jasa pangkas rambut','barbershop','jasa tukang cukur'],
+  'barber'         : ['jasa pangkas rambut','jasa tukang cukur'],
+  'potong rambut'  : ['jasa pangkas rambut','salon kecantikan'],
+  'tukang cukur'   : ['jasa pangkas rambut','jasa tukang cukur'],
+  'pangkas rambut' : ['jasa pangkas rambut','barbershop'],
+  'pijat'          : ['jasa pijat','aktivitas kebugaran','jasa kesehatan tradisional','refleksi'],
+  'refleksi'       : ['jasa pijat refleksi','jasa kesehatan tradisional','aktivitas kebugaran'],
+  'spa'            : ['aktivitas kebugaran jasmani','spa','jasa kesehatan'],
+  'facial'         : ['jasa kecantikan','perawatan kulit','salon kecantikan'],
+  'manicure'       : ['jasa kecantikan','perawatan kuku','salon kecantikan'],
+  'pedicure'       : ['jasa kecantikan','perawatan kuku','salon kecantikan'],
+  'tata rias'      : ['jasa tata rias','jasa kecantikan','make up artist'],
+  'makeup artist'  : ['jasa tata rias','jasa kecantikan'],
+  'kecantikan'     : ['jasa kecantikan','salon kecantikan','perawatan kecantikan'],
+
+  // ══════════════════════════════
+  //  JASA — Transportasi & Logistik
+  // ══════════════════════════════
+  'ojek'           : ['angkutan ojek','jasa transportasi roda dua','ojek online'],
+  'ojol'           : ['angkutan ojek online','platform transportasi online','kurir online'],
+  'taksi'          : ['angkutan taksi','jasa angkutan penumpang','taksi'],
+  'angkot'         : ['angkutan penumpang','angkutan umum','angkot'],
+  'bus'            : ['angkutan bus','angkutan penumpang tidak dalam trayek','bus pariwisata'],
+  'truk'           : ['angkutan barang','jasa angkutan truk','muatan truk'],
+  'ekspedisi'      : ['jasa pengiriman barang','angkutan barang','ekspedisi'],
+  'kurir'          : ['jasa pengiriman barang','kurir','jasa kurir'],
+  'pengiriman'     : ['jasa pengiriman barang','jasa logistik','kurir'],
+  'rental mobil'   : ['sewa kendaraan bermotor','rental mobil','jasa sewa kendaraan'],
+  'sewa mobil'     : ['sewa kendaraan bermotor','jasa sewa kendaraan bermotor roda empat'],
+  'sewa motor'     : ['sewa kendaraan bermotor','jasa sewa sepeda motor'],
+  'travel'         : ['agen perjalanan','jasa perjalanan wisata','travel'],
+  'agen travel'    : ['agen perjalanan','jasa perjalanan wisata'],
+  'tour'           : ['jasa perjalanan wisata','agen perjalanan','pariwisata'],
+  'jasa antar'     : ['angkutan barang','jasa pengiriman','kurir'],
+  'mover'          : ['jasa pemindahan barang','angkutan barang','jasa pindahan'],
+  'pindahan'       : ['jasa pemindahan barang','angkutan barang'],
+
+  // ══════════════════════════════
+  //  JASA — Pendidikan
+  // ══════════════════════════════
+  'les'             : ['pendidikan lainnya','kursus','bimbingan belajar','les privat'],
+  'kursus'          : ['kursus','pendidikan lainnya','lembaga kursus'],
+  'bimbel'          : ['bimbingan belajar','kursus','lembaga bimbel','pendidikan lainnya'],
+  'bimbingan belajar': ['bimbingan belajar','kursus','pendidikan lainnya'],
+  'privat'          : ['les privat','bimbingan belajar','kursus privat'],
+  'pelatihan'       : ['jasa pelatihan','kursus','lembaga pelatihan','pendidikan lainnya'],
+  'training'        : ['jasa pelatihan','kursus','pendidikan lainnya'],
+  'workshop'        : ['jasa pelatihan','seminar','pendidikan lainnya'],
+  'kursus bahasa'   : ['kursus bahasa','pendidikan lainnya','lembaga kursus bahasa'],
+  'kursus komputer' : ['pendidikan lainnya','kursus komputer','lembaga kursus'],
+  'daycare'         : ['jasa penitipan anak','daycare','pendidikan anak usia dini'],
+  'paud'            : ['pendidikan anak usia dini','paud','taman bermain'],
+  'taman kanak'     : ['pendidikan anak usia dini','pendidikan dasar','taman kanak-kanak'],
+  'tk'              : ['taman kanak-kanak','pendidikan anak usia dini'],
+  'playgroup'       : ['pendidikan anak usia dini','daycare','jasa penitipan anak'],
+  'sekolah'         : ['pendidikan dasar','pendidikan','jasa pendidikan','sekolah'],
+
+  // ══════════════════════════════
+  //  JASA — Kesehatan
+  // ══════════════════════════════
+  'dokter'      : ['praktik dokter','aktivitas kesehatan manusia','jasa medis'],
+  'bidan'       : ['praktik bidan','aktivitas kesehatan manusia'],
+  'perawat'     : ['aktivitas kesehatan manusia','jasa keperawatan'],
+  'klinik'      : ['klinik','aktivitas kesehatan manusia','jasa medis'],
+  'puskesmas'   : ['aktivitas kesehatan manusia','puskesmas'],
+  'rumah sakit' : ['rumah sakit','aktivitas kesehatan manusia'],
+  'apotek'      : ['apotek','eceran produk farmasi','apotek dan toko obat'],
+  'apotik'      : ['apotek','eceran produk farmasi','perdagangan obat'],
+  'optik'       : ['jasa optik','eceran kacamata','toko optik'],
+  'lab'         : ['laboratorium','jasa pengujian laboratorium','aktivitas kesehatan'],
+  'laboratorium': ['jasa pengujian laboratorium','laboratorium kesehatan','aktivitas kesehatan'],
+  'fisioterapi' : ['aktivitas fisioterapi','jasa fisioterapi','aktivitas kesehatan'],
+  'terapi'      : ['jasa fisioterapi','aktivitas kesehatan','jasa terapi'],
+  'akupunktur'  : ['jasa akupunktur','kesehatan tradisional','jasa kesehatan'],
+  'pijat urut'  : ['jasa pijat tradisional','kesehatan tradisional'],
+
+  // ══════════════════════════════
+  //  JASA — Konstruksi & Instalasi
+  // ══════════════════════════════
+  'kontraktor'     : ['konstruksi gedung','kontraktor','jasa konstruksi'],
+  'tukang bangunan': ['konstruksi','jasa konstruksi','tukang bangunan'],
+  'renovasi'       : ['konstruksi gedung','renovasi','jasa konstruksi'],
+  'bangun rumah'   : ['konstruksi gedung tempat tinggal','jasa konstruksi'],
+  'jasa bangun'    : ['konstruksi gedung','jasa konstruksi'],
+  'pasang keramik' : ['konstruksi gedung','jasa instalasi bahan bangunan'],
+  'instalasi listrik': ['instalasi ketenagalistrikan','jasa instalasi listrik'],
+  'pasang listrik' : ['instalasi ketenagalistrikan','jasa instalasi listrik'],
+  'instalasi ac'   : ['jasa instalasi ac','pemasangan ac','reparasi peralatan rumah tangga'],
+  'pasang ac'      : ['jasa instalasi ac','instalasi peralatan','reparasi peralatan rumah tangga'],
+  'jasa plumbing'  : ['jasa instalasi perpipaan','konstruksi','plumbing'],
+  'pasang pipa'    : ['jasa instalasi perpipaan','konstruksi'],
+  'arsitek'        : ['jasa arsitektur','konsultasi arsitektur','jasa teknik'],
+  'desain interior': ['jasa desain interior','jasa arsitektur','konsultan desain'],
+
+  // ══════════════════════════════
+  //  JASA — Event & Kreatif
+  // ══════════════════════════════
+  'fotografer'       : ['jasa fotografi','studio foto','jasa pemotretan'],
+  'videografer'      : ['jasa pembuatan video','jasa produksi film','jasa fotografi'],
+  'studio foto'      : ['jasa fotografi','studio foto'],
+  'wedding organizer': ['jasa penyelenggaraan acara pernikahan','event organizer','jasa dekorasi'],
+  'event organizer'  : ['jasa penyelenggaraan acara','event organizer','jasa dekorasi'],
+  'eo'               : ['jasa penyelenggaraan acara','event organizer'],
+  'dekorasi'         : ['jasa dekorasi','jasa penyelenggaraan acara','florist'],
+  'florist'          : ['jasa dekorasi bunga','toko bunga','florist'],
+  'toko bunga'       : ['eceran bunga segar','florist','jasa dekorasi'],
+  'desain grafis'    : ['jasa desain grafis','jasa desain','konsultan desain'],
+  'percetakan buku'  : ['penerbitan buku','percetakan','industri percetakan'],
+  'konten kreator'   : ['aktivitas hiburan','jasa kreatif','periklanan','media digital'],
+  'youtuber'         : ['aktivitas hiburan','jasa kreatif','media digital'],
+  'influencer'       : ['periklanan','jasa pemasaran','media digital'],
+
+  // ══════════════════════════════
+  //  JASA — Properti & Akomodasi
+  // ══════════════════════════════
+  'kos kosan'    : ['penyediaan akomodasi jangka pendek','indekos','sewa kamar'],
+  'kost'         : ['penyediaan akomodasi','indekos','sewa kamar'],
+  'kontrakan'    : ['sewa rumah','real estat','penyediaan akomodasi'],
+  'sewa rumah'   : ['sewa dan pengelolaan real estat','real estat'],
+  'sewa gedung'  : ['sewa gedung dan bangunan','real estat'],
+  'sewa kantor'  : ['sewa gedung perkantoran','real estat'],
+  'penginapan'   : ['penyediaan akomodasi jangka pendek','penginapan'],
+  'hotel'        : ['hotel','penyediaan akomodasi','hotel dan penginapan'],
+  'motel'        : ['hotel','penyediaan akomodasi','motel'],
+  'villa'        : ['villa','penyediaan akomodasi','penginapan'],
+  'homestay'     : ['penyediaan akomodasi','homestay','wisma'],
+  'losmen'       : ['penyediaan akomodasi jangka pendek','losmen','penginapan'],
+  'wisma'        : ['penyediaan akomodasi','wisma','penginapan'],
+  'agen properti': ['real estat','agen properti','perantara perdagangan properti'],
+  'broker properti':['real estat','broker properti','agen properti'],
+  'developer'    : ['pengembang real estat','pengembangan properti','real estat'],
+  'jual rumah'   : ['perantara perdagangan properti','real estat','agen properti'],
+
+  // ══════════════════════════════
+  //  JASA — Keuangan & Profesional
+  // ══════════════════════════════
+  'money changer'   : ['penukaran valuta asing','money changer','jasa keuangan'],
+  'penukaran uang'  : ['penukaran valuta asing','jasa keuangan'],
+  'transfer uang'   : ['pengiriman uang','jasa keuangan','remitansi'],
+  'remitansi'       : ['pengiriman uang','remitansi','jasa keuangan'],
+  'pegadaian'       : ['pergadaian','jasa pegadaian','lembaga keuangan non bank'],
+  'gadai'           : ['pergadaian','jasa pegadaian'],
+  'leasing'         : ['leasing','sewa guna usaha','lembaga pembiayaan'],
+  'multifinance'    : ['lembaga pembiayaan','multifinance','sewa guna usaha'],
+  'kredit'          : ['lembaga pembiayaan','jasa keuangan','kredit'],
+  'ksp'             : ['koperasi simpan pinjam','ksp','lembaga keuangan non bank'],
+  'koperasi'        : ['koperasi','koperasi simpan pinjam','koperasi konsumen'],
+  'konsultan'       : ['jasa konsultasi','konsultan','aktivitas konsultasi manajemen'],
+  'konsultan pajak' : ['jasa konsultasi pajak','konsultan perpajakan'],
+  'notaris'         : ['aktivitas hukum','notaris','jasa hukum'],
+  'pengacara'       : ['aktivitas hukum','pengacara','jasa hukum'],
+  'akuntan'         : ['aktivitas akuntansi','akuntan','jasa akuntansi'],
+
+  // ══════════════════════════════
+  //  JASA — Teknologi & Digital
+  // ══════════════════════════════
+  'software'         : ['pengembangan perangkat lunak','jasa komputer','software'],
+  'aplikasi'         : ['pengembangan perangkat lunak','jasa pengembangan aplikasi'],
+  'web'              : ['pengembangan perangkat lunak','jasa komputer','pemrograman web'],
+  'programmer'       : ['pemrograman','pengembangan perangkat lunak','jasa komputer'],
+  'it support'       : ['jasa teknologi informasi','aktivitas jasa komputer'],
+  'komputer'         : ['jasa reparasi komputer','perdagangan komputer','eceran komputer'],
+  'warnet'           : ['jasa akses internet','warnet','kafe internet'],
+  'internet'         : ['jasa akses internet','jasa teknologi informasi'],
+  'hosting'          : ['jasa teknologi informasi','hosting','cloud computing'],
+  'digital marketing': ['jasa pemasaran digital','periklanan','jasa pemasaran'],
+  'media sosial'     : ['periklanan','jasa pemasaran digital','media digital'],
+  'seo'              : ['jasa pemasaran digital','jasa komputer'],
+
+  // ══════════════════════════════
+  //  PRODUKSI — Makanan & Minuman
+  // ══════════════════════════════
+  'industri makanan'  : ['industri pengolahan makanan','industri makanan'],
+  'pabrik kerupuk'    : ['industri kerupuk','industri makanan ringan','industri produk makanan'],
+  'industri kerupuk'  : ['industri kerupuk','industri makanan ringan'],
+  'pabrik keripik'    : ['industri keripik','industri makanan ringan','industri produk makanan'],
+  'industri keripik'  : ['industri keripik','industri makanan ringan'],
+  'pabrik tempe'      : ['industri tempe','industri produk kedelai','industri makanan'],
+  'buat tempe'        : ['industri tempe','industri produk kedelai'],
+  'industri tempe'    : ['industri tempe','industri produk kedelai'],
+  'pabrik tahu'       : ['industri tahu','industri produk kedelai'],
+  'industri tahu'     : ['industri tahu','industri produk kedelai'],
+  'pabrik roti'       : ['industri roti','industri produk roti dan kue'],
+  'industri roti'     : ['industri roti','industri produk roti dan kue'],
+  'bakery'            : ['industri roti','industri produk roti dan kue','toko roti'],
+  'toko roti'         : ['industri roti','eceran roti','bakery'],
+  'pabrik kue'        : ['industri kue','industri produk roti dan kue'],
+  'pabrik mie'        : ['industri mie dan produk sejenisnya','industri makanan'],
+  'industri mie'      : ['industri mie dan produk sejenisnya'],
+  'pabrik gula'       : ['industri gula','industri pengolahan tebu'],
+  'pabrik minyak'     : ['industri minyak goreng','industri minyak nabati'],
+  'industri minyak'   : ['industri minyak goreng','industri minyak nabati'],
+  'pabrik es'         : ['industri es','industri es balok','industri produk es'],
+  'industri es krim'  : ['industri es krim','industri produk susu'],
+  'penggilingan padi' : ['industri penggilingan padi dan beras','penggilingan beras'],
+  'penggilingan beras': ['industri penggilingan padi dan beras'],
+  'penggilingan'      : ['industri penggilingan','penggilingan padi'],
+  'pengolahan ikan'   : ['industri pengolahan dan pengawetan ikan','industri produk ikan'],
+  'industri ikan'     : ['industri pengolahan dan pengawetan ikan'],
+  'abon'              : ['industri pengolahan daging','industri produk makanan'],
+  'pabrik bakso'      : ['industri pengolahan dan pengawetan daging','industri produk daging'],
+  'pengolahan daging' : ['industri pengolahan dan pengawetan produk daging'],
+  'pabrik susu'       : ['industri susu dan produk susu','industri produk susu'],
+  'industri susu'     : ['industri susu dan produk susu'],
+  'pabrik minuman'    : ['industri minuman','industri air minum'],
+  'industri minuman'  : ['industri minuman','air minum dalam kemasan'],
+  'air minum'         : ['industri air minum','depot air minum','air kemasan'],
+  'depot air'         : ['depot air minum','industri air minum','air minum isi ulang'],
+  'kecap'             : ['industri kecap','industri bumbu makanan'],
+  'industri kecap'    : ['industri kecap','industri bumbu makanan'],
+  'sambal'            : ['industri bumbu makanan','industri sambal','industri saus'],
+  'pabrik bumbu'      : ['industri bumbu makanan','industri rempah'],
+
+  // ══════════════════════════════
+  //  PRODUKSI — Tekstil & Pakaian
+  // ══════════════════════════════
+  'konveksi'          : ['industri pakaian jadi','konfeksi','industri konveksi'],
+  'garmen'            : ['industri pakaian jadi','garmen','industri tekstil'],
+  'industri pakaian'  : ['industri pakaian jadi','industri tekstil'],
+  'penjahit'          : ['industri pakaian jadi','jasa penjahitan','menjahit pakaian'],
+  'jahit'             : ['jasa penjahitan','industri pakaian jadi','menjahit'],
+  'jahit pakaian'     : ['industri pakaian jadi','jasa penjahitan'],
+  'sablon'            : ['industri sablon','industri pakaian jadi','percetakan'],
+  'batik'             : ['industri batik','eceran batik','kerajinan batik'],
+  'industri batik'    : ['industri batik','industri tekstil'],
+  'tenun'             : ['industri kain tenun','industri tekstil','tenun tradisional'],
+  'sulam'             : ['industri sulaman','industri tekstil','kerajinan sulam'],
+  'kain'              : ['industri tekstil','industri kain','perdagangan tekstil'],
+  'benang'            : ['industri pemintalan benang','industri tekstil'],
+
+  // ══════════════════════════════
+  //  PRODUKSI — Kayu & Mebel
+  // ══════════════════════════════
+  'mebel'             : ['industri furnitur dari kayu','industri mebel','mebel'],
+  'furniture'         : ['industri furnitur','industri mebel','furniture'],
+  'furnitur'          : ['industri furnitur','industri mebel'],
+  'industri kayu'     : ['industri kayu','penggergajian kayu','industri perkayuan'],
+  'penggergajian'     : ['industri penggergajian kayu','pengolahan kayu'],
+  'pengrajin kayu'    : ['industri furnitur kayu','kerajinan kayu'],
+  'kerajinan kayu'    : ['industri furnitur kayu','kerajinan kayu','industri barang dari kayu'],
+  'bambu'             : ['industri kerajinan bambu','industri barang dari bambu'],
+  'rotan'             : ['industri kerajinan rotan','industri barang dari rotan'],
+
+  // ══════════════════════════════
+  //  PRODUKSI — Logam & Mesin
+  // ══════════════════════════════
+  'las'               : ['jasa pengelasan','industri barang logam','jasa las'],
+  'pandai besi'       : ['industri tempa logam','industri barang dari logam'],
+  'bubut'             : ['industri permesinan','jasa pembubutan','industri mesin'],
+  'pabrik besi'       : ['industri barang dari baja dan besi','industri logam'],
+  'industri logam'    : ['industri barang dari logam','industri logam dasar'],
+  'pengecoran'        : ['industri pengecoran logam','industri logam'],
+  'pabrik mesin'      : ['industri mesin dan perlengkapan','industri mesin'],
+
+  // ══════════════════════════════
+  //  PRODUKSI — Kimia & Plastik
+  // ══════════════════════════════
+  'pabrik plastik'    : ['industri barang dari plastik','industri plastik'],
+  'industri plastik'  : ['industri barang dari plastik'],
+  'pabrik cat'        : ['industri cat dan tinta cetak','industri kimia'],
+  'industri cat'      : ['industri cat dan tinta cetak'],
+  'pabrik sabun'      : ['industri sabun','industri produk kebersihan'],
+  'industri sabun'    : ['industri sabun dan deterjen'],
+  'pabrik kosmetik'   : ['industri kosmetik','industri produk kecantikan'],
+  'industri kosmetik' : ['industri kosmetik dan produk kecantikan'],
+  'pabrik pupuk'      : ['industri pupuk','industri kimia'],
+  'industri pupuk'    : ['industri pupuk'],
+  'pabrik obat'       : ['industri produk farmasi','industri obat-obatan'],
+  'industri farmasi'  : ['industri produk farmasi','industri obat'],
+  'pabrik kertas'     : ['industri kertas','industri produk kertas'],
+  'industri kertas'   : ['industri kertas dan karton'],
+
+  // ══════════════════════════════
+  //  PRODUKSI — Bangunan & Material
+  // ══════════════════════════════
+  'pabrik bata'       : ['industri batu bata','industri bahan bangunan'],
+  'industri bata'     : ['industri batu bata merah'],
+  'pabrik genteng'    : ['industri genteng dari tanah liat','industri bahan bangunan'],
+  'pabrik semen'      : ['industri semen','industri bahan bangunan'],
+  'pabrik keramik'    : ['industri keramik','industri produk keramik'],
+  'industri beton'    : ['industri beton','industri bahan bangunan'],
+
+  // ══════════════════════════════
+  //  PRODUKSI — Percetakan & Media
+  // ══════════════════════════════
+  'percetakan'        : ['industri percetakan','percetakan'],
+  'cetak'             : ['industri percetakan','jasa percetakan'],
+  'sablon massal'     : ['industri percetakan','industri sablon'],
+  'penerbitan'        : ['penerbitan','industri penerbitan'],
+
+  // ══════════════════════════════
+  //  PERDAGANGAN — Bahan Pokok
+  // ══════════════════════════════
+  'bensin'        : ['bahan bakar minyak','bbm','eceran bahan bakar cair','spbu'],
+  'pertamini'     : ['bahan bakar minyak','eceran bahan bakar cair pertamini'],
+  'pom bensin'    : ['bahan bakar minyak','spbu','pengisian bahan bakar'],
+  'spbu'          : ['perdagangan eceran bahan bakar kendaraan bermotor','spbu'],
+  'bbm'           : ['bahan bakar minyak','eceran bahan bakar'],
+  'minyak goreng' : ['eceran minyak goreng','perdagangan minyak nabati'],
+  'sembako'       : ['eceran bahan makanan','eceran berbagai macam barang','bahan pokok'],
+  'kelontong'     : ['eceran berbagai macam barang','toko kelontong','minimarket'],
+  'warung'        : ['eceran berbagai macam barang','warung','pedagang eceran'],
+  'toko'          : ['perdagangan eceran','toko'],
+  'minimarket'    : ['eceran berbagai macam barang','minimarket','swalayan'],
+  'swalayan'      : ['eceran berbagai macam barang','supermarket','swalayan'],
+  'supermarket'   : ['supermarket','eceran berbagai macam barang'],
+  'grosir'        : ['perdagangan besar','grosir','agen'],
+  'agen'          : ['agen','perdagangan besar','agen tunggal'],
+  'distributor'   : ['agen','perdagangan besar','distributor'],
+  'supplier'      : ['perdagangan besar','supplier','penyedia bahan baku'],
+  'ekspor'        : ['ekspor','perdagangan ekspor','agen ekspor'],
+  'impor'         : ['impor','perdagangan impor'],
+
+  // ══════════════════════════════
+  //  PERDAGANGAN — Online
+  // ══════════════════════════════
+  'online shop'    : ['perdagangan eceran melalui media internet','e-commerce'],
+  'toko online'    : ['perdagangan eceran melalui media internet','e-commerce'],
+  'marketplace'    : ['perdagangan eceran melalui media internet','e-commerce'],
+  'dropship'       : ['perdagangan eceran melalui media internet','dropship','e-commerce'],
+  'dropshipper'    : ['perdagangan eceran melalui media internet','e-commerce'],
+  'jualan online'  : ['perdagangan eceran melalui media internet','e-commerce'],
+  'reseller'       : ['perdagangan eceran','reseller'],
+
+  // ══════════════════════════════
+  //  PERDAGANGAN — Makanan & Minuman
+  // ══════════════════════════════
+  'warung makan'   : ['rumah makan','restoran','warung makan','penyediaan makanan'],
+  'rumah makan'    : ['rumah makan','restoran','penyediaan makanan'],
+  'restoran'       : ['restoran','rumah makan','penyediaan makanan dan minuman'],
+  'cafe'           : ['kafe','restoran','penyediaan minuman'],
+  'kafe'           : ['kafe','penyediaan minuman'],
+  'kedai kopi'     : ['kafe','penyediaan minuman','kedai kopi'],
+  'warteg'         : ['rumah makan','warung nasi','penyediaan makanan'],
+  'katering'       : ['katering','penyediaan jasa boga','jasa boga'],
+  'catering'       : ['katering','penyediaan jasa boga'],
+  'jasa boga'      : ['katering','jasa boga','penyediaan makanan'],
+  'kantin'         : ['kantin','penyediaan makanan','rumah makan'],
+  'bakso'          : ['rumah makan','penyediaan makanan'],
+  'mie ayam'       : ['rumah makan','penyediaan makanan'],
+  'gorengan'       : ['penyediaan makanan','pedagang kaki lima makanan'],
+  'pkl'            : ['pedagang kaki lima','eceran kaki lima'],
+  'pedagang kaki lima': ['pedagang kaki lima','eceran kaki lima'],
+  'angkringan'     : ['penyediaan makanan','pedagang kaki lima makanan'],
+  'martabak'       : ['penyediaan makanan','pedagang kaki lima makanan'],
+  'food court'     : ['penyediaan makanan dan minuman','restoran'],
+  'gerobak'        : ['pedagang kaki lima','pedagang keliling'],
+  'es krim'        : ['eceran es krim','penyediaan makanan'],
+
+  // ══════════════════════════════
+  //  PERDAGANGAN — Fashion
+  // ══════════════════════════════
+  'baju'      : ['eceran pakaian','perdagangan pakaian'],
+  'pakaian'   : ['eceran pakaian','perdagangan pakaian jadi'],
+  'sepatu'    : ['eceran alas kaki','perdagangan alas kaki'],
+  'tas'       : ['eceran tas','perdagangan tas'],
+  'aksesoris' : ['eceran aksesoris','perdagangan aksesoris'],
+  'perhiasan' : ['eceran perhiasan','perdagangan perhiasan'],
+  'emas'      : ['perdagangan emas','eceran emas','toko emas'],
+  'toko emas' : ['perdagangan emas','toko emas','eceran perhiasan'],
+  'batik jual': ['eceran batik','perdagangan batik'],
+
+  // ══════════════════════════════
+  //  PERDAGANGAN — Elektronik
+  // ══════════════════════════════
+  'elektronik'  : ['eceran alat elektronik','perdagangan elektronik'],
+  'hp'          : ['perdagangan eceran telepon seluler','eceran handphone'],
+  'konter hp'   : ['perdagangan eceran telepon seluler','eceran handphone'],
+  'pulsa'       : ['perdagangan eceran pulsa','agen pulsa'],
+  'spare part'  : ['perdagangan eceran suku cadang','perdagangan suku cadang'],
+  'suku cadang' : ['perdagangan eceran suku cadang kendaraan'],
+  'dealer'      : ['perdagangan eceran kendaraan bermotor','dealer kendaraan'],
+  'showroom'    : ['perdagangan eceran kendaraan bermotor','showroom'],
+  'tv'          : ['eceran alat elektronik','perdagangan televisi'],
+  'ac'          : ['perdagangan ac','instalasi ac'],
+  'kulkas'      : ['eceran alat elektronik','perdagangan kulkas'],
+  'laptop'      : ['perdagangan eceran komputer','eceran laptop'],
+
+  // ══════════════════════════════
+  //  PERDAGANGAN — Material & Bangunan
+  // ══════════════════════════════
+  'bahan bangunan' : ['perdagangan bahan bangunan','eceran bahan bangunan'],
+  'toko bangunan'  : ['perdagangan bahan bangunan','toko material'],
+  'material bangunan':['perdagangan bahan bangunan','eceran material'],
+  'cat'            : ['eceran cat','perdagangan cat dan pernis'],
+  'besi'           : ['perdagangan besi','eceran besi bangunan'],
+  'semen'          : ['perdagangan semen','eceran semen'],
+  'pasir'          : ['perdagangan pasir','perdagangan galian'],
+
+  // ══════════════════════════════
+  //  PERDAGANGAN — Otomotif
+  // ══════════════════════════════
+  'salon mobil'    : ['jasa perawatan kendaraan bermotor','salon mobil'],
+
+  // ══════════════════════════════
+  //  PERTANIAN — Tanaman
+  // ══════════════════════════════
+  'sawah'          : ['pertanian padi sawah','pertanian tanaman pangan'],
+  'padi'           : ['pertanian padi sawah','pertanian tanaman pangan'],
+  'jagung'         : ['pertanian jagung','pertanian tanaman pangan'],
+  'singkong'       : ['pertanian ubi kayu','pertanian tanaman pangan'],
+  'sayur'          : ['pertanian sayuran','pertanian hortikultura'],
+  'jual sayur'     : ['eceran sayuran','perdagangan hasil pertanian'],
+  'buah'           : ['pertanian buah-buahan','pertanian hortikultura'],
+  'jual buah'      : ['eceran buah','perdagangan hasil pertanian'],
+  'bunga'          : ['pertanian tanaman hias','hortikultura'],
+  'tanaman hias'   : ['pertanian tanaman hias','hortikultura'],
+  'kopi'           : ['perkebunan kopi','pertanian tanaman perkebunan'],
+  'sawit'          : ['perkebunan kelapa sawit','pertanian tanaman perkebunan'],
+  'karet'          : ['perkebunan karet','pertanian karet'],
+  'kakao'          : ['perkebunan kakao','pertanian tanaman perkebunan'],
+  'tebu'           : ['perkebunan tebu','pertanian tanaman perkebunan'],
+  'kelapa'         : ['perkebunan kelapa','pertanian tanaman perkebunan'],
+  'tembakau'       : ['perkebunan tembakau','pertanian tanaman perkebunan'],
+  'kebun'          : ['pertanian hortikultura','perkebunan','pertanian tanaman'],
+  'perkebunan'     : ['pertanian tanaman perkebunan','perkebunan'],
+  'bibit'          : ['perdagangan benih','benih tanaman','pembibitan'],
+  'benih'          : ['perdagangan benih','pembibitan tanaman'],
+  'pupuk'          : ['perdagangan pupuk','eceran pupuk','industri pupuk'],
+  'pestisida'      : ['perdagangan pestisida','eceran pestisida'],
+  'nursery'        : ['pembibitan tanaman','pertanian tanaman hias'],
+  'tanaman obat'   : ['pertanian tanaman obat-obatan','tanaman herbal'],
+
+  // ══════════════════════════════
+  //  PERTANIAN — Peternakan
+  // ══════════════════════════════
+  'ternak'         : ['peternakan','budi daya hewan ternak'],
+  'peternakan'     : ['peternakan','budi daya hewan'],
+  'kandang'        : ['peternakan','budi daya hewan'],
+  'sapi'           : ['peternakan sapi','budi daya sapi'],
+  'susu sapi'      : ['peternakan sapi perah','industri susu'],
+  'kambing'        : ['peternakan kambing','budi daya kambing'],
+  'domba'          : ['peternakan domba','budi daya domba'],
+  'ayam'           : ['peternakan ayam','budi daya unggas'],
+  'bebek'          : ['peternakan itik','budi daya itik'],
+  'telur'          : ['peternakan unggas','budi daya ayam petelur'],
+  'pakan ternak'   : ['perdagangan pakan ternak','industri pakan ternak'],
+
+  // ══════════════════════════════
+  //  PERTANIAN — Perikanan
+  // ══════════════════════════════
+  'nelayan'        : ['penangkapan ikan','perikanan tangkap','perikanan'],
+  'budidaya ikan'  : ['budi daya perikanan','budi daya ikan'],
+  'kolam ikan'     : ['budi daya perikanan','kolam ikan','perikanan air tawar'],
+  'tambak'         : ['budi daya perikanan','tambak','perikanan air payau'],
+  'udang'          : ['budi daya udang','perikanan','tambak udang'],
+  'lele'           : ['budi daya ikan lele','perikanan air tawar'],
+  'gurame'         : ['budi daya ikan gurame','perikanan air tawar'],
+  'ikan'           : ['perikanan','budi daya ikan','penangkapan ikan'],
+  'rumput laut'    : ['budi daya rumput laut','perikanan laut'],
+  'budidaya'       : ['budi daya','perikanan','peternakan'],
+
+  // ══════════════════════════════
+  //  PERTANIAN — Tambang/Galian
+  // ══════════════════════════════
+  'tambang'        : ['pertambangan','penambangan','industri pertambangan'],
+  'galian'         : ['penggalian','pertambangan','galian'],
+  'batu bara'      : ['pertambangan batu bara','penambangan batu bara'],
+  'pasir tambang'  : ['penggalian pasir','penggalian bahan galian'],
+  'batu kali'      : ['penggalian batu','penggalian bahan galian'],
+
+  // ══════════════════════════════
+  //  PENDUKUNG — Media & Hiburan
+  // ══════════════════════════════
+  'musik'          : ['aktivitas hiburan','kesenian','pertunjukan musik'],
+  'band'           : ['aktivitas hiburan','pertunjukan musik'],
+  'studio rekam'   : ['industri rekaman suara','studio rekaman','industri musik'],
+  'karaoke'        : ['aktivitas hiburan','karaoke','tempat hiburan'],
+  'bioskop'        : ['aktivitas hiburan','bioskop','industri film'],
+  'film'           : ['industri film','aktivitas hiburan','produksi film'],
+  'radio'          : ['aktivitas siaran radio','penyiaran radio'],
+  'tv station'     : ['aktivitas siaran televisi','penyiaran televisi'],
+  'koran'          : ['penerbitan surat kabar','media cetak'],
+  'majalah'        : ['penerbitan majalah','media cetak'],
+  'portal berita'  : ['aktivitas portal web','media online'],
+  'iklan'          : ['periklanan','jasa periklanan','reklame'],
+  'reklame'        : ['periklanan','jasa reklame'],
+  'museum'         : ['aktivitas museum','jasa budaya'],
+  'perpustakaan'   : ['perpustakaan','aktivitas budaya'],
+  'wisata'         : ['pariwisata','jasa perjalanan wisata','objek wisata'],
+  'kolam renang'   : ['aktivitas kebugaran jasmani','kolam renang','jasa olahraga'],
+  'gym'            : ['aktivitas kebugaran jasmani','pusat kebugaran','gym'],
+  'fitness'        : ['aktivitas kebugaran jasmani','pusat kebugaran'],
+  'lapangan futsal': ['aktivitas olahraga','penyewaan lapangan olahraga'],
+  'futsal'         : ['aktivitas olahraga','sewa lapangan futsal'],
+  'biliar'         : ['aktivitas hiburan','biliar','tempat hiburan'],
+  'game center'    : ['aktivitas hiburan','game center','tempat hiburan'],
+
+  // ══════════════════════════════
+  //  PENDUKUNG — Logistik & Gudang
+  // ══════════════════════════════
+  'gudang'         : ['pergudangan','jasa pergudangan','aktivitas penunjang angkutan'],
+  'logistik'       : ['jasa logistik','aktivitas penunjang angkutan','pergudangan'],
+  'forwarder'      : ['jasa freight forwarding','aktivitas penunjang angkutan'],
+  'bongkar muat'   : ['bongkar muat','aktivitas penunjang angkutan'],
+
+  // ══════════════════════════════
+  //  PENDUKUNG — Energi & Lingkungan
+  // ══════════════════════════════
+  'listrik'       : ['pengadaan listrik','instalasi ketenagalistrikan'],
+  'panel surya'   : ['pengadaan listrik tenaga surya','energi terbarukan'],
+  'solar'         : ['energi surya','panel surya','pengadaan listrik'],
+  'air bersih'    : ['pengadaan air bersih','jasa air minum'],
+  'sampah'        : ['pengelolaan sampah','jasa kebersihan','persampahan'],
+  'daur ulang'    : ['pengolahan sampah','daur ulang','jasa pengelolaan limbah'],
+  'limbah'        : ['jasa pengelolaan limbah','pengolahan limbah'],
+  'bank sampah'   : ['pengelolaan sampah','bank sampah'],
+  'pdam'          : ['pengadaan air minum','distribusi air minum'],
+
+  // ══════════════════════════════
+  //  PENDUKUNG — Keuangan Lembaga
+  // ══════════════════════════════
+  'bank'           : ['perbankan','bank umum','lembaga keuangan'],
+  'bpr'            : ['bank perkreditan rakyat','lembaga keuangan'],
+  'asuransi'       : ['asuransi','jasa asuransi','lembaga keuangan'],
+  'investasi'      : ['investasi','jasa keuangan','pasar modal'],
+  'saham'          : ['pasar modal','perdagangan efek','jasa keuangan'],
+  'reksadana'      : ['manajer investasi','jasa keuangan','pasar modal'],
+  'fintech'        : ['jasa keuangan berbasis teknologi','fintech','lembaga pembiayaan'],
+  'pinjol'         : ['jasa keuangan berbasis teknologi','pinjaman online','fintech'],
+};
+// ── LEVEL LABELS ──
+const LEVEL_LABEL = {
+  kategori: 'Kategori',
+  golongan_pokok: 'Golongan Pokok',
+  golongan: 'Golongan',
+  subgolongan: 'Subgolongan',
+  kelompok: 'Kelompok',
+};
+
+// ── SAMPLE QUERIES (chip suggestions) ──
+const CARI_SAMPLES = [
+  'jual bensin','bengkel motor','toko kelontong',
+  'warung makan','laundry','konveksi baju',
+  'jual sayur','rental mobil','kursus bahasa',
+  'apotek','cuci mobil','budidaya ikan',
+];
+
+// ── EXTENDED FLAT INDEX (includes uraian for scoring) ──
+// Built when KBLI JSON is loaded; each entry has:
+// { level, kode, judul, uraian, path[] }
+function buildSmartIndex(kategoriArr) {
+  const idx = [];
+  kategoriArr.forEach(kat => {
+    idx.push({ level:'kategori', kode:kat.kode, judul:kat.judul, uraian:(kat.uraian||''), path:[kat.kode], judul_path:[kat.judul] });
+    (kat.golongan_pokok||[]).forEach(gp => {
+      idx.push({ level:'golongan_pokok', kode:gp.kode, judul:gp.judul, uraian:(gp.uraian||''), path:[kat.kode,gp.kode], judul_path:[kat.judul,gp.judul] });
+      (gp.golongan||[]).forEach(g => {
+        idx.push({ level:'golongan', kode:g.kode, judul:g.judul, uraian:(g.uraian||''), path:[kat.kode,gp.kode,g.kode], judul_path:[kat.judul,gp.judul,g.judul] });
+        (g.subgolongan||[]).forEach(sg => {
+          idx.push({ level:'subgolongan', kode:sg.kode, judul:sg.judul, uraian:(sg.uraian||''), path:[kat.kode,gp.kode,g.kode,sg.kode], judul_path:[kat.judul,gp.judul,g.judul,sg.judul] });
+          (sg.kelompok||[]).forEach(k => {
+            idx.push({ level:'kelompok', kode:k.kode, judul:k.judul, uraian:(k.uraian||''), path:[kat.kode,gp.kode,g.kode,sg.kode,k.kode], judul_path:[kat.judul,gp.judul,g.judul,sg.judul,k.judul] });
+          });
+        });
+      });
+    });
+  });
+  return idx;
+}
+
+// ── NORMALIZE TEXT ──
+function normalizeText(str) {
+  return (str||'').toLowerCase()
+    .replace(/[^\w\s]/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+// ── PHRASE CONTEXT DETECTOR (v3 — 5 konteks) ──
+// Mendeteksi konteks dominan dari query:
+//   jasa        → menjual tenaga/keahlian (bengkel, laundry, salon, dll)
+//   produksi    → mengolah bahan baku → produk jadi (industri, pabrik, konveksi)
+//   perdagangan → beli barang jadi → jual kembali (toko, jual, eceran, grosir)
+//   pertanian   → menghasilkan dari alam (tani, ternak, ikan, tambang)
+//   pendukung   → penunjang bisnis (konsultan, gudang, logistik, media)
+function detectQueryContext(normQuery, matchedAliases) {
+  const all = normQuery + ' ' + matchedAliases.join(' ');
+
+  // Hitung sinyal per konteks dari CONTEXT_SIGNALS
+  const counts = { jasa:0, produksi:0, perdagangan:0, pertanian:0, pendukung:0 };
+  Object.entries(CONTEXT_SIGNALS).forEach(([ctx, signals]) => {
+    signals.forEach(s => {
+      if (all.includes(normalizeText(s))) counts[ctx]++;
+    });
+  });
+
+  // Tentukan konteks dominan
+  let dominant = 'general';
+  let max = 1; // minimum 2 sinyal agar yakin
+  Object.entries(counts).forEach(([k,v]) => { if (v > max) { max = v; dominant = k; } });
+  return dominant;
+}
+
+// ── EXPAND QUERY WITH ALIASES ──
+function expandQuery(rawQuery) {
+  const norm = normalizeText(rawQuery);
+  const queryTokens = norm.split(/\s+/).filter(Boolean);
+  const expandedSet = new Set(queryTokens);
+  const matchedAliases = [];
+  const aliasTerms = []; // actual synonym phrases matched
+
+  // Sort alias keys by length desc → longer phrases matched first
+  const sortedKeys = Object.keys(ALIAS_DICT).sort((a,b) => b.length - a.length);
+  sortedKeys.forEach(key => {
+    const normKey = normalizeText(key);
+    if (norm.includes(normKey)) {
+      const syns = ALIAS_DICT[key];
+      syns.forEach(s => {
+        const normS = normalizeText(s);
+        normS.split(/\s+/).forEach(t => expandedSet.add(t));
+        aliasTerms.push(normS); // keep full phrases too
+      });
+      matchedAliases.push(key);
+    }
+  });
+
+  return { expandedTokens: Array.from(expandedSet), matchedAliases, aliasTerms };
+}
+
+// ── PHRASE SCORE: reward exact sub-phrase presence ──
+function phraseScore(text, phrases) {
+  let bonus = 0;
+  phrases.forEach(phrase => {
+    if (phrase.length < 5) return;
+    if (text.includes(phrase)) bonus += 22;
+    // Partial: at least 2 consecutive words of phrase in text
+    const words = phrase.split(/\s+/);
+    if (words.length >= 2) {
+      for (let i = 0; i < words.length - 1; i++) {
+        const bigram = words[i] + ' ' + words[i+1];
+        if (bigram.length > 6 && text.includes(bigram)) { bonus += 12; break; }
+      }
+    }
+  });
+  return Math.min(bonus, 40);
+}
+
+// ── CONTEXT PENALTY (v3 — 5 konteks) ──
+// Memberi penalti pada item yang tidak sesuai konteks query.
+// Semakin besar penalti → item tersebut turun di ranking.
+function contextPenalty(titleNorm, uraianNorm, context) {
+  let penalty = 0;
+
+  if (context === 'jasa') {
+    // Query jasa → penalti item industri/pabrik atau perdagangan besar
+    if (/\bindustri\b/.test(titleNorm) && !/\bjasa\b/.test(titleNorm)) penalty += 35;
+    if (/\bpabrik\b|\bmanufaktur\b/.test(titleNorm)) penalty += 30;
+    if (/\bperdagangan\s+besar\b|\bgrosir\b/.test(titleNorm)) penalty += 20;
+    if (/\bpertanian\b|\bpeternakan\b|\bperikanan\b/.test(titleNorm)) penalty += 15;
+  }
+
+  if (context === 'produksi') {
+    // Query produksi/pabrik → penalti item eceran/warung/jasa non-industri
+    if (/\beceran\b|\bwarung\b|\btoko\b/.test(titleNorm) && !/\bindustri\b/.test(titleNorm)) penalty += 30;
+    if (/\bjasa\b/.test(titleNorm) && !/\bindustri\b/.test(titleNorm)) penalty += 15;
+    if (/\bpertanian\b|\bpeternakan\b/.test(titleNorm) && !/\bpengolahan\b/.test(titleNorm)) penalty += 10;
+  }
+
+  if (context === 'perdagangan') {
+    // Query perdagangan → penalti item murni industri atau jasa teknis
+    if (/\bindustri\b/.test(titleNorm) && !/\bperdagangan\b/.test(titleNorm)) penalty += 25;
+    if (/\bjasa\s+(konstruksi|instalasi|teknik)\b/.test(titleNorm)) penalty += 20;
+    if (/\bpeternakan\b|\bperikanan\b|\bpertanian\b/.test(titleNorm)) penalty += 15;
+  }
+
+  if (context === 'pertanian') {
+    // Query pertanian → penalti item industri pengolahan, perdagangan, jasa perkotaan
+    if (/\bindustri\b/.test(titleNorm) && !/\bpertanian\b|\bperikanan\b/.test(titleNorm)) penalty += 20;
+    if (/\beceran\b|\bgrosir\b|\bperdagangan besar\b/.test(titleNorm)) penalty += 15;
+    if (/\bjasa\s+(keuangan|teknologi|informasi)\b/.test(titleNorm)) penalty += 20;
+  }
+
+  if (context === 'pendukung') {
+    // Query pendukung → penalti item produksi, pertanian, eceran kecil
+    if (/\bindustri\b|\bpabrik\b/.test(titleNorm)) penalty += 20;
+    if (/\bpertanian\b|\bpeternakan\b|\bperikanan\b/.test(titleNorm)) penalty += 15;
+    if (/\beceran\b|\bwarung\b|\bpedagang kaki lima\b/.test(titleNorm)) penalty += 15;
+  }
+
+  return penalty;
+}
+
+// ── PRECISION CONTEXT PENALTY (training presisi dari backup learnDB) ──
+// Penegasan tambahan atas contextPenalty di atas, dikalibrasi presisi dari
+// hasil training manual (lihat DEFAULT_LEARN_SEED). Berlaku untuk SEMUA
+// query baru — bukan hanya yang sudah tercatat di learnDB — sehingga prinsip
+// berikut otomatis menggeneralisasi:
+//   1) Niaga (jual/toko/warung/agen/sewa) → kode kategori A (pertanian/
+//      peternakan/perikanan, 01-03) dan B (pertambangan, 05-09) DITURUNKAN
+//      tajam. Barang boleh berasal dari hasil tani/ternak/tambang, tapi
+//      yang dicari adalah PEDAGANGnya (kategori G), bukan PRODUSEN bahan
+//      mentahnya.
+//   2) Jasa/layanan (klinik, cukur, servis, dll) → kode kategori A dan B
+//      juga DITURUNKAN tajam. Yang dicari adalah PENYEDIA JASA-nya
+//      (kategori Q/S/N sesuai bidang), bukan budidaya/produksi bahan baku
+//      yang kebetulan bernama serupa.
+//   3) Tempat makan/minum (warung makan, kedai kopi) → kode kategori I
+//      (56xxx, Penyediaan Makanan & Minuman) DINAIKKAN, sedangkan kode
+//      eceran murni (G) dan kode pertanian bahan mentah (A) DITURUNKAN.
+function precisionContextPenalty(kode, titleNorm, context) {
+  let penalty = 0;
+  const kategoriNum = parseInt(String(kode).slice(0, 2), 10);
+  const isPertanianPeternakanPerikanan = kategoriNum >= 1 && kategoriNum <= 3;
+  const isPertambangan = kategoriNum >= 5 && kategoriNum <= 9;
+  const isPerdaganganEceran = /^4[67]/.test(String(kode));
+  const isMakanMinum = /^56/.test(String(kode));
+
+  if (context === 'perdagangan') {
+    // Niaga: jual/toko/warung-barang/agen/sewa → bukan A/B
+    if (isPertanianPeternakanPerikanan) penalty += 25;
+    if (isPertambangan) penalty += 25;
+  }
+
+  if (context === 'jasa') {
+    // Jasa/layanan: klinik/cukur/servis → bukan A/B (produksi/budidaya bahan baku)
+    if (isPertanianPeternakanPerikanan) penalty += 25;
+    if (isPertambangan) penalty += 20;
+  }
+
+  if (context === 'general') {
+    // Tempat makan/minum spesifik (kedai kopi, warung makan, dll) →
+    // turunkan A (bahan mentah) dan eceran murni G bila judul memuat sinyal kuliner
+    if (/\bkopi\b|\bmakan\b|\bminum\b|\bkedai\b|\bwarung\s+makan\b/.test(titleNorm)) {
+      if (isPertanianPeternakanPerikanan) penalty += 20;
+    }
+  }
+
+  if (context === 'pertanian') {
+    // Budidaya/ternak/peternakan/perikanan → harus mengarah ke kategori A
+    // (kode produksi/budidaya), BUKAN ke kategori G (dagang eceran hasil
+    // panen/ternaknya) atau ke kategori jasa non-pertanian. Ini menegakkan
+    // arah berlawanan dari aturan 'perdagangan' di atas secara simetris:
+    // ketika query benar-benar tentang BUDIDAYA, pedagang eceran-nya yang
+    // harus turun, bukan sebaliknya.
+    if (isPerdaganganEceran) penalty += 22;
+    if (/\bjasa\b/.test(titleNorm) && !/\bpertanian\b|\bpeternakan\b|\bperikanan\b/.test(titleNorm)) penalty += 18;
+    if (isMakanMinum) penalty += 15;
+  }
+
+  return penalty;
+}
+
+// ── USER FEEDBACK SYSTEM (self-learning) ──
+// Stores user "thumbs up/down" on search results → adjusts score next time
+const LEARN_KEY = 'kbli_learn_v1';
+let learnDB = {};
+
+// ── DEFAULT LEARN SEED ──
+// Hasil training presisi (kalibrasi manual) yang menegakkan prinsip dasar:
+//   • Query niaga ("jual", "toko", "warung [barang]", "agen", "sewa") → harus
+//     condong ke kategori G (Perdagangan) / N (Persewaan), BUKAN ke kategori
+//     produksi/penghasil bahan mentah (A: pertanian/peternakan/perikanan,
+//     B: pertambangan), meski nama barangnya berasal dari sana.
+//   • Query jasa/layanan ("klinik", "cukur", "service", dll) → harus condong
+//     ke kategori jasa sesuai bidangnya (Q-Kesehatan, S-Jasa Lainnya,
+//     N-Jasa Persewaan/Travel), bukan ke kategori produksi/budidaya (A/B/C)
+//     walau objeknya mirip.
+//   • Query tempat makan/minum ("warung makan", "kedai kopi") → kategori
+//     I (Penyediaan Makan Minum, 56xxx), bukan G-eceran bahan makanan
+//     dan bukan A-pertanian (budidaya bahan mentahnya).
+// Seed ini di-merge ke learnDB saat boot, hanya mengisi kombinasi query+kode
+// yang BELUM pernah disentuh feedback pengguna sendiri, agar feedback baru
+// pengguna selalu diutamakan di atas seed bawaan.
+const DEFAULT_LEARN_SEED = {"cuci mobil":{"95312":2},"sewa mobil":{"47812":-1,"77100":24},"warung makan":{"56":2,"4719":-3,"5610":-3,"47111":-3,"47112":-3,"47191":-3,"47192":-3,"56101":2},"toko kelontong":{"47111":-3,"47112":-1,"47191":-3,"47192":-1},"toko":{"46420":-3,"47111":4,"47112":4,"47191":2,"47192":2,"61106":-3},"jual pakan":{"47754":30},"jual bensin":{"47301":-3,"47302":1},"toko bangunan":{"47111":-3,"47112":-3,"47221":-3,"47222":-3,"47246":-3,"47301":-3,"47302":-3,"47511":-3,"47526":-3,"47630":-3},"toko ponsel":{"47111":-3,"47112":-3,"47191":-3,"47192":-3,"47211":-3,"47212":-3,"47213":-3,"47214":-3,"47215":-3,"47216":-3,"47219":-3,"47221":-3,"47222":-3,"47230":-3,"47241":-3,"47242":-3,"47243":-3,"47244":-3,"47245":-3,"47246":-3,"47249":-3,"47301":-3,"47302":-3,"47303":-3,"47401":-3,"47404":4},"kedai kopi":{"56304":26,"56306":20,"01279":-12,"01160":-3,"01191":-3,"01193":-3,"01199":-3},"tukang cukur":{"96210":18},"klinik kecantikan":{"86104":-3,"87910":2,"03110":-12,"03120":-9},"penjahit":{"14120":2},"agen travel":{"46100":-3,"46201":-3,"46202":-3,"46203":-3,"46204":-3,"46205":-3,"46206":-3,"46207":-3,"46208":-3,"46209":-3,"46311":-3,"46312":-3,"46313":-3,"46314":-3,"46315":-3,"46319":-3,"46321":-3,"46322":-3,"46323":-3,"46324":-3,"46325":-3,"46326":-3,"46327":-3,"46329":-3,"46331":-3,"46332":-3,"46333":-3,"46334":-3,"46335":-3,"46339":-3,"46411":-3,"46412":-3,"46413":-3,"46414":-3,"46415":-3,"46420":-3,"46430":-3,"46441":-3,"46442":-3,"46451":-3,"46452":-3,"46491":-3,"46492":-3,"46493":-3,"46494":-3,"46495":-3,"46496":-3,"46499":-3,"46511":-3,"46512":-3,"46521":-3,"46522":-3,"46523":-3,"46530":-3,"46591":-3,"79110":2},"jual telur":{"46325":-1,"47214":30,"01469":-1,"01462":-9}};
+
+// Merge seed ke learnDB tanpa menimpa entri yang sudah ada dari feedback pengguna
+function applyDefaultLearnSeed() {
+  Object.keys(DEFAULT_LEARN_SEED).forEach(qKey => {
+    const seedKodes = DEFAULT_LEARN_SEED[qKey];
+    if (!learnDB[qKey]) learnDB[qKey] = {};
+    Object.keys(seedKodes).forEach(kode => {
+      if (!(kode in learnDB[qKey])) {
+        learnDB[qKey][kode] = seedKodes[kode];
+      }
+    });
+  });
+}
+
+function loadLearnDB() {
+  try {
+    const raw = localStorage.getItem(LEARN_KEY);
+    learnDB = raw ? JSON.parse(raw) : {};
+  } catch { learnDB = {}; }
+  applyDefaultLearnSeed();
+  saveLearnDB();
+}
+
+function saveLearnDB() {
+  try { localStorage.setItem(LEARN_KEY, JSON.stringify(learnDB)); } catch {}
+}
+
+// Record that for query Q, kode K is a good/bad result
+function recordFeedback(query, kode, isPositive) {
+  const qKey = normalizeText(query);
+  if (!learnDB[qKey]) learnDB[qKey] = {};
+  // running score: +2 per upvote, -3 per downvote
+  const delta = isPositive ? 2 : -3;
+  learnDB[qKey][kode] = (learnDB[qKey][kode] || 0) + delta;
+  // Cap between -20 and +30
+  learnDB[qKey][kode] = Math.max(-20, Math.min(30, learnDB[qKey][kode]));
+  saveLearnDB();
+  // Re-render with updated scores
+  const inp = document.getElementById('cariInput');
+  if (inp) renderCariResults(inp.value);
+  toast(isPositive ? '👍 Masukan disimpan — hasil makin akurat!' : '👎 Masukan disimpan — hasil akan diperbaiki!');
+}
+
+function getLearningBonus(query, kode) {
+  const qKey = normalizeText(query);
+  return (learnDB[qKey] && learnDB[qKey][kode]) ? learnDB[qKey][kode] : 0;
+}
+
+// ── BACKUP & RESTORE LEARNING DB (scoring engine pencarian KBLI) ──
+function countLearnEntries() {
+  try { return Object.keys(learnDB).length; } catch { return 0; }
+}
+
+function updateLearnInfo() {
+  const el = document.getElementById('infoLearnCount');
+  if (el) el.textContent = countLearnEntries();
+}
+
+function exportLearnDB() {
+  const total = countLearnEntries();
+  if (!total) { toast('Belum ada data pembelajaran untuk dibackup.', 'error'); return; }
+  const payload = {
+    type: 'kbli_learn_backup',
+    version: 1,
+    exported: new Date().toISOString(),
+    totalQuery: total,
+    data: learnDB
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g,'-');
+  a.href = url;
+  a.download = `kbli-learn-backup-${ts}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast(`Backup berhasil diunduh (${total} query).`);
+}
+
+function importLearnDB(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    let parsed;
+    try {
+      parsed = JSON.parse(ev.target.result);
+    } catch {
+      toast('File backup tidak valid (bukan JSON).', 'error');
+      input.value = '';
+      return;
+    }
+    // Terima format backup resmi {type, data} ATAU file learnDB mentah {queryKey: {kode: skor}}
+    const incoming = (parsed && parsed.type === 'kbli_learn_backup' && parsed.data) ? parsed.data : parsed;
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+      toast('Struktur file backup tidak dikenali.', 'error');
+      input.value = '';
+      return;
+    }
+    const doMerge = confirm('Gabungkan (merge) dengan data pembelajaran yang sudah ada?\n\nOK = Gabungkan (skor ditambahkan)\nBatal = Timpa/replace total data lama');
+    if (doMerge) {
+      Object.keys(incoming).forEach(qKey => {
+        if (!learnDB[qKey]) learnDB[qKey] = {};
+        const kodes = incoming[qKey] || {};
+        Object.keys(kodes).forEach(kode => {
+          const incomingVal = Number(kodes[kode]) || 0;
+          const current = Number(learnDB[qKey][kode]) || 0;
+          let merged = current + incomingVal;
+          merged = Math.max(-20, Math.min(30, merged));
+          learnDB[qKey][kode] = merged;
+        });
+      });
+    } else {
+      learnDB = incoming;
+    }
+    saveLearnDB();
+    updateLearnInfo();
+    const inp = document.getElementById('cariInput');
+    if (inp && inp.value) renderCariResults(inp.value);
+    toast(`Restore berhasil (${Object.keys(incoming).length} query dipulihkan, mode ${doMerge ? 'gabung' : 'timpa'}).`);
+    input.value = '';
+  };
+  reader.onerror = () => { toast('Gagal membaca file.', 'error'); input.value = ''; };
+  reader.readAsText(file);
+}
+
+// ── MAIN SCORING FUNCTION (v3 — kelompok-first) ──
+function scoreItem(item, queryNorm, expandedTokens, matchedAliases, aliasTerms, context) {
+  const titleNorm  = normalizeText(item.judul);
+  const uraianNorm = normalizeText(item.uraian);
+
+  let score = 0;
+  const reasons = [];
+
+  // ── A. EXACT TITLE MATCH ──
+  if (titleNorm === queryNorm) {
+    score += 100; reasons.push('Judul persis sama');
+    return { score, reasons };
+  }
+
+  // ── B. TITLE CONTAINS FULL QUERY PHRASE ──
+  if (queryNorm.length > 3 && titleNorm.includes(queryNorm)) {
+    score += 80; reasons.push('Judul memuat frasa kunci');
+  }
+
+  // ── C. ALIAS PHRASE MATCH ON TITLE (strongest signal) ──
+  const titleAliasScore = phraseScore(titleNorm, aliasTerms);
+  if (titleAliasScore > 0) {
+    score += titleAliasScore;
+    reasons.push('Nama usaha cocok di judul');
+  }
+
+  // ── D. ALIAS PHRASE MATCH ON URAIAN (medium signal) ──
+  const uraianAliasScore = phraseScore(uraianNorm, aliasTerms);
+  if (uraianAliasScore > 0) {
+    score += Math.round(uraianAliasScore * 0.55);
+    if (!reasons.some(r=>r.includes('uraian'))) reasons.push('Cocok di deskripsi');
+  }
+
+  // ── E. TOKEN MATCH ON TITLE ──
+  const queryTokens = queryNorm.split(/\s+/).filter(t => t.length >= 3);
+  let titleTokenHits = 0;
+  queryTokens.forEach(tok => {
+    if (titleNorm.includes(tok)) titleTokenHits++;
+  });
+  if (titleTokenHits > 0 && queryTokens.length > 0) {
+    const coverage = titleTokenHits / queryTokens.length;
+    if (coverage >= 0.5) {
+      const tokenBonus = Math.round(coverage * 30);
+      score += tokenBonus;
+      if (!reasons.length) reasons.push('Kata kunci cocok di judul');
+    }
+  }
+
+  // ── F. EXPANDED TOKEN MATCH ON TITLE (alias expansion) ──
+  let expandedTitleHits = 0;
+  const longTokens = expandedTokens.filter(t => t.length >= 5);
+  longTokens.forEach(tok => {
+    if (titleNorm.includes(tok)) expandedTitleHits++;
+  });
+  if (expandedTitleHits > 0) {
+    score += Math.min(expandedTitleHits * 8, 24);
+    if (!reasons.length) reasons.push('Sinonim usaha cocok');
+  }
+
+  // ── G. EXPANDED TOKEN MATCH ON URAIAN ──
+  let uraianHits = 0;
+  longTokens.forEach(tok => {
+    if (uraianNorm.includes(tok)) uraianHits++;
+  });
+  if (uraianHits > 0) {
+    score += Math.min(uraianHits * 4, 16);
+    if (!reasons.some(r=>r.includes('deskripsi'))) reasons.push('Cocok di deskripsi');
+  }
+
+  // ── H. CONTEXT PENALTY ──
+  const penalty = contextPenalty(titleNorm, uraianNorm, context);
+  if (penalty > 0) score -= penalty;
+
+  // ── H2. PRECISION CONTEXT PENALTY (training presisi dari backup learnDB) ──
+  const precisionPenalty = precisionContextPenalty(item.kode, titleNorm, context);
+  if (precisionPenalty > 0) score -= precisionPenalty;
+
+  // ── H3. FILTER SKALA USAHA (UMKM / Usaha Besar) ──
+  const skalaAdj = skalaUsahaAdjustment(titleNorm, uraianNorm);
+  if (skalaAdj !== 0) score += skalaAdj;
+
+  // ── I. LEVEL SPECIFICITY BONUS (kelompok-first, v3) ──
+  // Kelompok (5-digit) adalah level usaha yang paling spesifik dan relevan.
+  // Level di atasnya mendapat penalti agar tidak mengisi slot hasil dengan
+  // node abstrak ketika kelompok turunannya sudah tertangkap.
+  // Untuk konteks 'produksi' dan 'perdagangan', subgolongan tetap relevan.
+  if (score > 0) {
+    const levelBonus = {
+      kelompok:      20,   // boost kuat — ini target utama pencarian usaha
+      subgolongan:    6,   // masih cukup spesifik
+      golongan:      -5,   // hindari tampil jika ada kelompok yang cocok
+      golongan_pokok:-12,  // sangat abstrak — muncul hanya jika benar-benar relevan
+      kategori:      -20,  // jangan tampil di Cari Usaha kecuali darurat
+    };
+    score += levelBonus[item.level] || 0;
+  }
+
+  return { score: Math.max(0, Math.min(100, score)), reasons };
+}
+
+// ── MAIN SEARCH FUNCTION (v3 — kelompok-first) ──
+function searchCari(rawQuery) {
+  if (!rawQuery || rawQuery.trim().length < 2) return [];
+  if (!App.kbliSmartIdx) return [];
+
+  const queryNorm = normalizeText(rawQuery);
+  const { expandedTokens, matchedAliases, aliasTerms } = expandQuery(rawQuery);
+  const context = detectQueryContext(queryNorm, matchedAliases);
+
+  const scored = [];
+  App.kbliSmartIdx.forEach(item => {
+    let { score, reasons } = scoreItem(item, queryNorm, expandedTokens, matchedAliases, aliasTerms, context);
+    // Apply learning bonus/penalty from user feedback
+    const learningDelta = getLearningBonus(rawQuery, item.kode);
+    if (learningDelta !== 0) {
+      score = Math.max(0, Math.min(100, score + learningDelta));
+      if (learningDelta > 0) reasons.push('⭐ Pilihan sebelumnya');
+      if (learningDelta < 0) reasons = reasons.filter(r => !r.includes('⭐'));
+    }
+    if (score >= 10) scored.push({ item, score, reasons });
+  });
+
+  // Sort: primary by score, secondary by level specificity (kelompok first)
+  const levelOrder = { kelompok:0, subgolongan:1, golongan:2, golongan_pokok:3, kategori:4 };
+  scored.sort((a,b) => b.score - a.score || (levelOrder[a.item.level]||9) - (levelOrder[b.item.level]||9));
+
+  // ── KELOMPOK-FIRST DEDUPLICATION ──
+  // Collect kode prefixes of all kelompok results.
+  // A parent node (golongan/subgolongan/dst.) is suppressed if any of its
+  // kelompok children already appear in the result set.
+  const kelompokKodes = new Set(
+    scored.filter(r => r.item.level === 'kelompok').map(r => r.item.kode)
+  );
+
+  // Build a set of parent path prefixes covered by winning kelompok entries
+  // kode structure: kelompok=5d, subgolongan=4d, golongan=3d, golongan_pokok=2d, kategori=1d
+  const coveredPrefixes = new Set();
+  kelompokKodes.forEach(kode => {
+    const s = String(kode);
+    // Each shorter prefix is "covered" by this kelompok
+    if (s.length >= 2) coveredPrefixes.add(s.slice(0, 2));
+    if (s.length >= 3) coveredPrefixes.add(s.slice(0, 3));
+    if (s.length >= 4) coveredPrefixes.add(s.slice(0, 4));
+  });
+
+  function isSuppressedByChild(item) {
+    if (item.level === 'kelompok') return false; // never suppress kelompok itself
+    const s = String(item.kode);
+    return coveredPrefixes.has(s);
+  }
+
+  const seen = new Set();
+  const deduped = [];
+  for (const r of scored) {
+    if (seen.has(r.item.kode)) continue;
+    // Suppress abstract parent nodes when a specific kelompok child already covers them
+    if (isSuppressedByChild(r.item)) continue;
+    seen.add(r.item.kode);
+    deduped.push(r);
+    if (deduped.length >= 15) break;
+  }
+
+  // Fallback: if nothing passed (all suppressed or score too low), relax suppression
+  if (!deduped.length) {
+    const seenFb = new Set();
+    for (const r of scored) {
+      if (seenFb.has(r.item.kode)) continue;
+      seenFb.add(r.item.kode);
+      deduped.push(r);
+      if (deduped.length >= 10) break;
+    }
+  }
+
+  return deduped;
+}
+
+// ── RENDER CARI RESULTS ──
+function renderCariResults(rawQuery) {
+  const container = document.getElementById('cariResults');
+  const metaEl    = document.getElementById('cariMeta');
+
+  if (!App.kbliSmartIdx) {
+    container.innerHTML = `<div class="cari-no-data">
+      <i class="bi bi-database-slash"></i>
+      <p>Data KBLI belum dimuat</p>
+      <small>Unggah file JSON KBLI di menu <strong>Pengaturan</strong> terlebih dahulu</small>
+    </div>`;
+    metaEl.textContent = '';
+    return;
+  }
+
+  if (!rawQuery || rawQuery.trim().length < 2) {
+    container.innerHTML = `<div class="cari-no-data">
+      <i class="bi bi-keyboard"></i>
+      <p>Ketik nama usaha untuk mulai mencari</p>
+      <small>Gunakan bahasa sehari-hari seperti "jual bensin" atau "bengkel motor"</small>
+    </div>`;
+    metaEl.textContent = '';
+    return;
+  }
+
+  const results = searchCari(rawQuery);
+  if (!results.length) {
+    metaEl.textContent = '';
+    container.innerHTML = `<div class="cari-no-data">
+      <i class="bi bi-search"></i>
+      <p>Tidak ada hasil untuk <strong>"${escHtml(rawQuery)}"</strong></p>
+      <small>Coba gunakan kata lain, misal: "jual" → "perdagangan", "usaha" + jenis usaha</small>
+    </div>`;
+    return;
+  }
+
+  metaEl.textContent = `${results.length} hasil cocok untuk "${rawQuery}"`;
+  container.innerHTML = results.map((r, i) => renderCariCard(r, i, rawQuery)).join('');
+  logSearchAggregate(results[0].item.kode, rawQuery, results[0].score);
+}
+
+function renderCariCard({ item, score, reasons }, rank, rawQuery) {
+  const pct = score;
+  const ringClass = pct >= 65 ? 'high' : pct >= 35 ? 'med' : 'low';
+  const ringLabel = pct >= 65 ? 'Tinggi' : pct >= 35 ? 'Sedang' : 'Rendah';
+
+  const levelPrefix = getLevelPrefix(item.level);
+  const nodeId = levelPrefix + item.kode;
+
+  // Path breadcrumbs (parent path, not including self)
+  const parentPath = (item.judul_path || []).slice(0, -1);
+  const pathHtml = parentPath.length
+    ? parentPath.map(p => `<span class="path-crumb">${escHtml(p)}</span>`).join('<span style="color:var(--text-muted)">›</span>')
+    : '';
+
+  // Why tags
+  const whyHtml = reasons.length
+    ? reasons.slice(0, 3).map(r => `<span class="cari-why-tag">${escHtml(r)}</span>`).join('')
+    : '';
+
+  // Learning bonus indicator
+  const lb = getLearningBonus(rawQuery, item.kode);
+  const learnBadge = lb > 0
+    ? `<span style="font-size:10px;color:#16a34a;font-weight:700;margin-left:4px">⭐ Disimpan</span>`
+    : lb < 0 ? `<span style="font-size:10px;color:#dc2626;font-weight:700;margin-left:4px">⬇ Dikurangi</span>` : '';
+
+  const qEsc = escHtml(rawQuery).replace(/'/g,"\\'");
+  const kodeEsc = escHtml(item.kode).replace(/'/g,"\\'");
+
+  return `<div class="cari-card">
+    <div class="cari-card-header">
+      <div class="cari-score-ring ${ringClass}">
+        <span class="cari-score-pct">${pct}%</span>
+        <span class="cari-score-lbl">${ringLabel}</span>
+      </div>
+      <div class="cari-card-body">
+        <span class="cari-card-code">${escHtml(item.kode)}</span>${learnBadge}
+        <div class="cari-card-title">${escHtml(item.judul)}</div>
+        <div class="cari-card-level">
+          <i class="bi bi-diagram-3" style="font-size:9px"></i>
+          ${escHtml(LEVEL_LABEL[item.level] || item.level)}
+        </div>
+      </div>
+    </div>
+    ${pathHtml ? `<div class="cari-card-path">${pathHtml}</div>` : ''}
+    ${whyHtml ? `<div class="cari-card-why"><span style="color:var(--text-muted);margin-right:2px">Cocok:</span>${whyHtml}</div>` : ''}
+    <div class="cari-card-actions">
+      <button class="btn-cari-open" onclick="navigateTo('${nodeId}','${item.level}');switchTab('kbli')">
+        <i class="bi bi-box-arrow-up-right"></i> Buka di KBLI
+      </button>
+      <button class="btn-cari-copy" onclick="navigator.clipboard.writeText('${kodeEsc}');toast('Kode ${kodeEsc} disalin ✓')" title="Salin kode">
+        <i class="bi bi-clipboard"></i> ${escHtml(item.kode)}
+      </button>
+      <button class="btn-cari-fb btn-fb-up" onclick="recordFeedback('${qEsc}','${kodeEsc}',true)" title="Hasil ini relevan">
+        <i class="bi bi-hand-thumbs-up"></i>
+      </button>
+      <button class="btn-cari-fb btn-fb-down" onclick="recordFeedback('${qEsc}','${kodeEsc}',false)" title="Hasil ini tidak relevan">
+        <i class="bi bi-hand-thumbs-down"></i>
+      </button>
+    </div>
+  </div>`;
+}
+
+// ── INIT CARI PAGE ──
+function initCariPage() {
+  // Render sample chips
+  const chipsEl = document.getElementById('cariChips');
+  if (chipsEl) {
+    chipsEl.innerHTML = CARI_SAMPLES.map(s =>
+      `<button class="cari-chip-btn" onclick="setCariQuery('${escHtml(s)}')">${escHtml(s)}</button>`
+    ).join('');
+  }
+  renderCariResults('');
+  maybeAutoShowTips();
+}
+
+function setCariQuery(q) {
+  const inp = document.getElementById('cariInput');
+  if (inp) { inp.value = q; inp.focus(); }
+  renderCariResults(q);
+}
+
+let cariTimeout = null;
+function onCariInput(val) {
+  clearTimeout(cariTimeout);
+  cariTimeout = setTimeout(() => renderCariResults(val), 220);
+}
+
+// ══════════════════════════════════════════════
+//  TIPS & TRIK MODAL (popup pertama kali masuk Cari Usaha)
+// ══════════════════════════════════════════════
+const TIPS_DONT_SHOW_KEY = 'kbli_tips_cari_hide_v1';
+
+function openTipsModal() {
+  const ov = document.getElementById('tipsModalOverlay');
+  if (ov) ov.classList.remove('hidden');
+}
+
+function closeTipsModal() {
+  const ov = document.getElementById('tipsModalOverlay');
+  if (ov) ov.classList.add('hidden');
+  const chk = document.getElementById('chkDontShowTips');
+  if (chk && chk.checked) {
+    try { localStorage.setItem(TIPS_DONT_SHOW_KEY, '1'); } catch {}
+  }
+}
+
+// Tampilkan otomatis hanya saat pertama kali masuk halaman Cari Usaha
+// (kecuali pengguna sudah mencentang "Jangan tampilkan lagi" sebelumnya)
+let tipsAutoShown = false;
+function maybeAutoShowTips() {
+  if (tipsAutoShown) return; // hanya sekali per sesi
+  let hidden = false;
+  try { hidden = localStorage.getItem(TIPS_DONT_SHOW_KEY) === '1'; } catch {}
+  if (!hidden) openTipsModal();
+  tipsAutoShown = true;
+}
+
+// ══════════════════════════════════════════════
+//  LEGAL MODAL: Syarat & Ketentuan (TOS) / Kebijakan Privasi
+// ══════════════════════════════════════════════
+const LEGAL_MODAL_IDS = { tos: 'legalModalTos', privacy: 'legalModalPrivacy' };
+
+function openLegalModal(type) {
+  const id = LEGAL_MODAL_IDS[type];
+  const el = id && document.getElementById(id);
+  if (el) el.classList.remove('hidden');
+}
+
+function closeLegalModal(type) {
+  const id = LEGAL_MODAL_IDS[type];
+  const el = id && document.getElementById(id);
+  if (el) el.classList.add('hidden');
+}
+
+// ══════════════════════════════════════════════
+//  FILTER SKALA USAHA (UMKM / Usaha Besar / Semua)
+// ══════════════════════════════════════════════
+// Catatan: kode KBLI tidak membedakan skala usaha secara baku, sehingga
+// filter ini bekerja sebagai penyesuaian bobot skor (bukan penghapusan
+// hasil), berdasarkan sinyal kata pada judul/uraian kode (rumah tangga,
+// mikro, kecil, menengah, vs. industri besar, korporasi, pabrik skala
+// besar, dst). Disimpan secara global agar terbaca oleh scoreItem().
+let App_skalaFilter = 'semua'; // 'semua' | 'umkm' | 'besar'
+
+function onSkalaFilterChange(target, checkboxEl) {
+  // Checkbox berfungsi seperti radio: hanya satu opsi aktif sekaligus
+  App_skalaFilter = target;
+  ['semua','umkm','besar'].forEach(key => {
+    const lbl = document.getElementById('skalaChk' + key.charAt(0).toUpperCase() + key.slice(1));
+    if (!lbl) return;
+    const inp = lbl.querySelector('input');
+    const isActive = key === target;
+    lbl.classList.toggle('active', isActive);
+    if (inp) inp.checked = isActive;
+  });
+  // Re-render hasil pencarian dengan filter baru
+  const inp = document.getElementById('cariInput');
+  if (inp && inp.value) renderCariResults(inp.value);
+}
+
+// Skor tambahan/penalti berdasarkan sinyal skala usaha pada judul/uraian
+function skalaUsahaAdjustment(titleNorm, uraianNorm) {
+  if (App_skalaFilter === 'semua') return 0;
+  const text = titleNorm + ' ' + uraianNorm;
+
+  const umkmSignals = /\brumah tangga\b|\bmikro\b|\bkecil\b|\bperorangan\b|\bukm\b|\bumkm\b|\bhome industri\b|\bindustri rumahan\b/;
+  const besarSignals = /\bbesar\b|\bkorporasi\b|\bindustri besar\b|\bpabrik\b|\bskala besar\b|\bmenengah\b/;
+
+  if (App_skalaFilter === 'umkm') {
+    if (umkmSignals.test(text)) return 12;   // bonus
+    if (besarSignals.test(text)) return -18; // penalti
+  }
+  if (App_skalaFilter === 'besar') {
+    if (besarSignals.test(text)) return 12;  // bonus
+    if (umkmSignals.test(text)) return -18;  // penalti
+  }
+  return 0;
+}
+
+// ══════════════════════════════════════════════
+//  TOGGLE ACCORDION NODE
+// ══════════════════════════════════════════════
+function toggleNode(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('open');
+}
+
+// ══════════════════════════════════════════════
+//  SETTINGS PANEL
+// ══════════════════════════════════════════════
+function updateSettings() {
+  // KBLI version (try to infer year from data or meta)
+  const kbliVer = App.kbliMeta ? '2025' : '—';
+  const kbjiVer = App.kbjiMeta ? (App.kbjiMeta.versi || '2014') : '—';
+  document.getElementById('infoVerKbli').textContent = kbliVer;
+  document.getElementById('infoVerKbji').textContent = kbjiVer;
+
+  // Status KBLI
+  const sk = document.getElementById('statusKbli');
+  if (App.kbliMeta) {
+    sk.classList.add('loaded');
+    sk.innerHTML = `<div class="dot"></div>
+      <div style="flex:1">
+        <div class="name">KBLI 2025</div>
+        <div class="meta">${App.kbliMeta.file} · ${fmtSize(App.kbliMeta.size)} · ${App.kbliMeta.loaded}</div>
+      </div>
+      <div class="btn-clear" onclick="clearData('kbli')">Hapus</div>`;
+  } else {
+    sk.classList.remove('loaded');
+    sk.innerHTML = `<div class="dot"></div><div><div class="name">KBLI</div><div class="meta">Belum ada data</div></div>`;
+  }
+
+  // Status KBJI
+  const sj = document.getElementById('statusKbji');
+  if (App.kbjiMeta) {
+    sj.classList.add('loaded');
+    sj.innerHTML = `<div class="dot"></div>
+      <div style="flex:1">
+        <div class="name">KBJI ${App.kbjiMeta.versi || '2014'}</div>
+        <div class="meta">${App.kbjiMeta.file} · ${fmtSize(App.kbjiMeta.size)} · ${App.kbjiMeta.loaded}</div>
+      </div>
+      <div class="btn-clear" onclick="clearData('kbji')">Hapus</div>`;
+  } else {
+    sj.classList.remove('loaded');
+    sj.innerHTML = `<div class="dot"></div><div><div class="name">KBJI</div><div class="meta">Belum ada data</div></div>`;
+  }
+
+  // Info jumlah query yang sudah terpelajari (scoring engine)
+  updateLearnInfo();
+}
+
+function clearData(type) {
+  if (!confirm(`Hapus data ${type.toUpperCase()} dari cache?`)) return;
+  localStorage.removeItem(type + '_data');
+  localStorage.removeItem(type + '_meta');
+  if (type === 'kbli') { App.kbli = null; App.kbliMeta = null; App.kbliFlat = []; renderKbli(null); }
+  else { App.kbji = null; App.kbjiMeta = null; App.kbjiFlat = []; renderKbji(null); }
+  updateSettings();
+  toast(`Data ${type.toUpperCase()} dihapus.`);
+}
+
+function clearAllData() {
+  if (!confirm('Hapus semua data cache (KBLI & KBJI)?')) return;
+  ['kbli','kbji'].forEach(type => {
+    localStorage.removeItem(type + '_data');
+    localStorage.removeItem(type + '_meta');
+  });
+  App.kbli = null; App.kbliMeta = null; App.kbliFlat = [];
+  App.kbji = null; App.kbjiMeta = null; App.kbjiFlat = [];
+  renderKbli(null); renderKbji(null); updateSettings();
+  toast('Semua cache dihapus.');
+}
+
+// ══════════════════════════════════════════════
+//  CACHE (localStorage, chunked for large data)
+// ══════════════════════════════════════════════
+function saveCache(key, value) {
+  try {
+    const str = JSON.stringify(value);
+    // Chunk if > 1.5MB per chunk
+    const chunkSize = 1400000;
+    if (str.length <= chunkSize) {
+      localStorage.setItem(key, str);
+      localStorage.removeItem(key + '_chunks');
+    } else {
+      const chunks = Math.ceil(str.length / chunkSize);
+      for (let i = 0; i < chunks; i++) {
+        localStorage.setItem(key + '_c' + i, str.slice(i * chunkSize, (i+1) * chunkSize));
+      }
+      localStorage.setItem(key + '_chunks', String(chunks));
+      localStorage.removeItem(key);
+    }
+  } catch { /* quota exceeded – silently skip cache */ }
+}
+
+function loadCache(key) {
+  try {
+    const chunks = localStorage.getItem(key + '_chunks');
+    if (chunks) {
+      let str = '';
+      for (let i = 0; i < Number(chunks); i++) str += (localStorage.getItem(key + '_c' + i) || '');
+      return str ? JSON.parse(str) : null;
+    }
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+// ══════════════════════════════════════════════
+//  DRAG & DROP ON UPLOAD ZONES
+// ══════════════════════════════════════════════
+['zoneKbli','zoneKbji'].forEach(id => {
+  const zone = document.getElementById(id);
+  const type = id.replace('zone','').toLowerCase();
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (type === 'kbli') processKbli(data, file);
+        else processKbji(data, file);
+      } catch { toast('File JSON tidak valid.', 'error'); }
+    };
+    reader.readAsText(file);
+  });
+});
+
+// ══════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Highlight multiple tokens in a string (tokens = array of lowercase strings)
+function hlTokens(str, tokens) {
+  if (!tokens || !tokens.length) return escHtml(str);
+  let result = escHtml(str);
+  tokens.forEach(t => {
+    if (!t) return;
+    const re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
+    result = result.replace(re, '<span class="hl">$1</span>');
+  });
+  return result;
+}
+
+function fmtSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1048576).toFixed(1) + ' MB';
+}
+function emptyState(icon, title, sub) {
+  return `<div class="empty-state"><i class="bi ${icon}"></i><p>${title}</p><small>${sub}</small></div>`;
+}
+function toast(msg, type) {
+  const c = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'toast-msg';
+  if (type === 'error') el.style.background = '#EF4444';
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 2800);
+}
+
+// ══════════════════════════════════════════════
+//  GITHUB AUTO SYNC MODULE
+//  Repo: https://github.com/mlev99/klasifikasi25
+//  Uses jsDelivr CDN to bypass CORS on raw files
+// ══════════════════════════════════════════════
+const githubSync = (() => {
+  const REPO  = 'mlev99/klasifikasi25';
+  const BRANCH = 'main';
+  // jsDelivr gives CORS-safe access to public GitHub files
+  const CDN   = `https://cdn.jsdelivr.net/gh/${REPO}@${BRANCH}`;
+  // GitHub API for listing / checking last-modified (no auth needed for public repos)
+  const API   = `https://api.github.com/repos/${REPO}/contents`;
+
+  // Files expected in the repo root
+  const FILES = {
+    kbli: { api: `${API}/KBLI_2025_lengkap.json`, cdn: `${CDN}/KBLI_2025_lengkap.json`, label: 'KBLI 2025', type: 'kbli' },
+    kbji: { api: `${API}/KBJI_2014_2002_lengkap_dedup.json`, cdn: `${CDN}/KBJI_2014_2002_lengkap_dedup.json`, label: 'KBJI 2014', type: 'kbji' },
+  };
+
+  const LS_KEY_SHA = 'gh_sync_sha';     // { kbli: sha, kbji: sha }
+  const LS_KEY_TS  = 'gh_sync_ts';      // last check timestamp
+  const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+  let _remoteInfo = {}; // { kbli: { sha, size, download_url }, kbji: … }
+  let _updateAvail = { kbli: false, kbji: false };
+  let _bannerDismissed = false;
+
+  // ── Helpers ──
+  function getStoredSha() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY_SHA) || '{}'); } catch { return {}; }
+  }
+  function setStoredSha(obj) {
+    try { localStorage.setItem(LS_KEY_SHA, JSON.stringify(obj)); } catch {}
+  }
+  function setLastChecked(ts) {
+    try { localStorage.setItem(LS_KEY_TS, String(ts)); } catch {}
+  }
+  function getLastChecked() {
+    return parseInt(localStorage.getItem(LS_KEY_TS) || '0', 10);
+  }
+  function isOnline() { return navigator.onLine; }
+
+  // ── UI helpers ──
+  function setSyncConnStatus(html) {
+    const el = document.getElementById('syncConnStatus');
+    if (el) el.innerHTML = html;
+  }
+  function setSyncAlert(html, type='info') {
+    const box = document.getElementById('syncAlertBox');
+    if (!box) return;
+    if (!html) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.display = 'block';
+    box.innerHTML = `<div class="sync-alert ${type}"><i class="bi bi-${type==='success'?'check-circle':type==='error'?'x-circle':type==='warn'?'exclamation-triangle':'info-circle'}"></i><span>${html}</span></div>`;
+  }
+  function setTopbarSyncBtn(state) {
+    const btn = document.getElementById('syncStatusBtn');
+    const icon = document.getElementById('syncStatusIcon');
+    if (!btn || !icon) return;
+    btn.style.display = 'flex';
+    btn.dataset.state = state;
+    if (state === 'update') { icon.className = 'bi bi-cloud-arrow-down-fill'; btn.title = 'Pembaruan tersedia — klik untuk unduh'; }
+    else if (state === 'ok')     { icon.className = 'bi bi-cloud-check'; btn.title = 'Data sudah terbaru'; btn.dataset.state=''; }
+    else if (state === 'syncing'){ icon.className = 'bi bi-cloud-arrow-down'; btn.title = 'Sedang mengunduh…'; }
+    else if (state === 'offline'){ btn.style.display = 'none'; }
+  }
+  function showBanner(msg) {
+    if (_bannerDismissed) return;
+    const banner = document.getElementById('syncBanner');
+    const txt = document.getElementById('syncBannerText');
+    if (banner) banner.classList.remove('hidden');
+    if (txt && msg) txt.innerHTML = msg;
+  }
+  function hideBanner() {
+    const banner = document.getElementById('syncBanner');
+    if (banner) banner.classList.add('hidden');
+  }
+  function showProgress(title, sub, pct, file='') {
+    const overlay = document.getElementById('syncProgressOverlay');
+    if (overlay) overlay.classList.remove('hidden');
+    const t = document.getElementById('syncProgressTitle');
+    const s = document.getElementById('syncProgressSub');
+    const b = document.getElementById('syncProgressBar');
+    const f = document.getElementById('syncProgressFile');
+    if (t) t.textContent = title;
+    if (s) s.textContent = sub;
+    if (b) b.style.width = pct + '%';
+    if (f) f.textContent = file;
+  }
+  function hideProgress() {
+    const overlay = document.getElementById('syncProgressOverlay');
+    if (overlay) overlay.classList.add('hidden');
+  }
+
+  // ── Check remote file metadata ──
+  async function checkRemote() {
+    if (!isOnline()) {
+      setSyncConnStatus('<span style="color:#EF4444"><i class="bi bi-wifi-off me-1"></i>Offline</span>');
+      setTopbarSyncBtn('offline');
+      return false;
+    }
+    setSyncConnStatus('<span style="color:var(--text-muted)"><i class="bi bi-arrow-clockwise me-1"></i>Memeriksa…</span>');
+    const btn = document.getElementById('btnSyncCheck');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Memeriksa…'; }
+
+    const stored = getStoredSha();
+    let anyUpdate = false;
+
+    for (const key of Object.keys(FILES)) {
+      const f = FILES[key];
+      try {
+        const res = await fetch(f.api, { headers: { 'Accept': 'application/vnd.github.v3+json' }, cache: 'no-cache' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const meta = await res.json();
+        _remoteInfo[key] = { sha: meta.sha, size: meta.size, name: meta.name, download_url: meta.download_url };
+        // Compare SHA with stored
+        _updateAvail[key] = (stored[key] !== meta.sha);
+        if (_updateAvail[key]) anyUpdate = true;
+        // Update UI
+        const verEl = document.getElementById(key === 'kbli' ? 'syncKbliRemoteVer' : 'syncKbjiRemoteVer');
+        if (verEl) verEl.textContent = `${fmtSize(meta.size)} · SHA ${meta.sha.slice(0,7)}${_updateAvail[key] ? ' 🆕' : ' ✓'}`;
+      } catch (err) {
+        _remoteInfo[key] = null;
+        const verEl = document.getElementById(key === 'kbli' ? 'syncKbliRemoteVer' : 'syncKbjiRemoteVer');
+        if (verEl) verEl.textContent = 'Tidak dapat diakses';
+      }
+    }
+
+    const now = Date.now();
+    setLastChecked(now);
+    const tsEl = document.getElementById('syncLastChecked');
+    if (tsEl) tsEl.textContent = new Date(now).toLocaleString('id-ID');
+    setSyncConnStatus('<span style="color:#22C55E"><i class="bi bi-wifi me-1"></i>Online</span>');
+
+    const dlBtn = document.getElementById('btnSyncDownload');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Cek Sekarang'; }
+
+    if (anyUpdate) {
+      const labels = Object.keys(_updateAvail).filter(k => _updateAvail[k]).map(k => FILES[k].label).join(' & ');
+      setSyncAlert(`Pembaruan tersedia: <strong>${labels}</strong>. Klik <strong>Unduh Semua</strong> untuk memuat data terbaru.`, 'warn');
+      if (dlBtn) dlBtn.style.display = '';
+      setTopbarSyncBtn('update');
+      showBanner(`<strong>Pembaruan Data Tersedia</strong> — ${labels} versi baru ditemukan di GitHub. <span style="opacity:.8;font-size:11px">(Klik untuk mengunduh)</span>`);
+    } else {
+      setSyncAlert('Semua data sudah menggunakan versi terbaru dari repositori GitHub.', 'success');
+      if (dlBtn) dlBtn.style.display = 'none';
+      setTopbarSyncBtn('ok');
+      hideBanner();
+    }
+    return anyUpdate;
+  }
+
+  // ── Download a single JSON file via CDN ──
+  async function downloadFile(key, progressCallback) {
+    const f = FILES[key];
+    // Use CDN URL for CORS-safe download; fallback to download_url from API
+    const url = f.cdn;
+    const res = await fetch(url, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`Gagal mengunduh ${f.label}: HTTP ${res.status}`);
+    const text = await res.text();
+    progressCallback && progressCallback(50);
+    const data = JSON.parse(text);
+    progressCallback && progressCallback(80);
+    // Reuse existing processors with a synthetic file object
+    const syntheticFile = { name: f.label.replace(' ','_') + '.json', size: text.length };
+    if (key === 'kbli') processKbli(data, syntheticFile);
+    else processKbji(data, syntheticFile);
+    // Save SHA to avoid re-prompting
+    const stored = getStoredSha();
+    if (_remoteInfo[key]) stored[key] = _remoteInfo[key].sha;
+    setStoredSha(stored);
+    progressCallback && progressCallback(100);
+  }
+
+  // ── Download all updated files ──
+  async function downloadAll() {
+    hideBanner();
+    _bannerDismissed = true; // suppress re-show during this session after manual action
+    setTopbarSyncBtn('syncing');
+    const keysToDownload = Object.keys(_updateAvail).filter(k => _updateAvail[k] && _remoteInfo[k]);
+    if (!keysToDownload.length) { toast('Tidak ada pembaruan yang perlu diunduh.'); return; }
+
+    let done = 0;
+    for (const key of keysToDownload) {
+      const f = FILES[key];
+      showProgress(`Mengunduh ${f.label}…`, 'Sedang mengambil data dari GitHub via CDN…', Math.round(done/keysToDownload.length*100), f.name);
+      try {
+        await downloadFile(key, (pct) => {
+          showProgress(`Mengunduh ${f.label}…`, 'Memproses data JSON…', Math.round((done/keysToDownload.length + pct/100/keysToDownload.length)*100), f.name);
+        });
+        done++;
+        _updateAvail[key] = false;
+      } catch (err) {
+        hideProgress();
+        toast(`Gagal mengunduh ${f.label}: ${err.message}`, 'error');
+        setTopbarSyncBtn('update');
+        setSyncAlert(`Gagal mengunduh <strong>${f.label}</strong>: ${err.message}. Coba lagi atau unggah file secara manual.`, 'error');
+        return;
+      }
+    }
+
+    hideProgress();
+    setTopbarSyncBtn('ok');
+    const dlBtn = document.getElementById('btnSyncDownload');
+    if (dlBtn) dlBtn.style.display = 'none';
+    setSyncAlert('Semua data berhasil diperbarui dari GitHub! ✓', 'success');
+    updateSettings();
+    toast('Sinkronisasi dari GitHub selesai ✓');
+  }
+
+  function dismissBanner() {
+    _bannerDismissed = true;
+    hideBanner();
+  }
+
+  // ── Auto check on startup and every 6 hours ──
+  async function autoCheck() {
+    if (!isOnline()) { setTopbarSyncBtn('offline'); return; }
+    const last = getLastChecked();
+    const now = Date.now();
+    // Don't spam: only check if 6h have passed OR first time
+    if (now - last < CHECK_INTERVAL_MS && last > 0) {
+      // Still show cached state
+      const stored = getStoredSha();
+      const anyUpdate = Object.keys(FILES).some(k => stored[k] === undefined);
+      // Update last-checked display
+      const tsEl = document.getElementById('syncLastChecked');
+      if (tsEl && last) tsEl.textContent = new Date(last).toLocaleString('id-ID');
+      setSyncConnStatus('<span style="color:#22C55E"><i class="bi bi-wifi me-1"></i>Online</span>');
+      if (anyUpdate) setTopbarSyncBtn('update');
+      return;
+    }
+    await checkRemote();
+  }
+
+  function checkNow() { checkRemote(); }
+
+  // ── Listen for online/offline events ──
+  window.addEventListener('online',  () => { setTopbarSyncBtn('ok'); autoCheck(); });
+  window.addEventListener('offline', () => { setTopbarSyncBtn('offline'); setSyncConnStatus('<span style="color:#EF4444"><i class="bi bi-wifi-off me-1"></i>Offline</span>'); });
+
+  return { autoCheck, checkNow, downloadAll, dismissBanner };
+})();
+
+// ══════════════════════════════════════════════
+//  STATISTIK PENCARIAN — Firebase Realtime Database
+//  Mengirim agregat "kata dicari → kode KBLI" secara otomatis.
+//  Frontend HANYA menampilkan data agregat (bukan log mentah per pencarian).
+// ══════════════════════════════════════════════
+
+// TODO: Ganti dengan config project Firebase Anda (Project Settings → General → Your apps → SDK setup).
+const firebaseConfig = {
+  apiKey: "GANTI_DENGAN_API_KEY",
+  authDomain: "GANTI_DENGAN_PROJECT.firebaseapp.com",
+  databaseURL: "https://GANTI_DENGAN_PROJECT-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "GANTI_DENGAN_PROJECT",
+};
+
+const StatsDB = {
+  db: null,
+  ready: false,
+  sentThisSession: new Set(), // dedup (kode|kataKey) supaya 1 kombinasi hanya dikirim sekali per sesi
+  path: 'agregatPencarian',
+};
+
+function initFirebaseStats() {
+  try {
+    if (typeof firebase === 'undefined') return;
+    if (!firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith('GANTI_')) {
+      console.warn('[StatsDB] firebaseConfig belum diisi — statistik pencarian dinonaktifkan.');
+      setStatsConnBadge(false, 'Firebase belum dikonfigurasi');
+      return;
+    }
+    firebase.initializeApp(firebaseConfig);
+    StatsDB.db = firebase.database();
+    StatsDB.ready = true;
+    setStatsConnBadge(true, 'Terhubung');
+  } catch (err) {
+    console.warn('[StatsDB] Gagal inisialisasi Firebase:', err);
+    setStatsConnBadge(false, 'Gagal terhubung');
+  }
+}
+
+function setStatsConnBadge(on, label) {
+  const el = document.getElementById('statsConnBadge');
+  if (!el) return;
+  el.className = 'stats-conn-badge ' + (on ? 'on' : 'off');
+  el.innerHTML = `<i class="bi bi-circle-fill" style="font-size:6px"></i> ${escHtml(label)}`;
+}
+
+// Kunci Firebase RTDB tidak boleh mengandung . # $ [ ] / atau whitespace mentah.
+function sanitizeKataKey(str) {
+  return normalizeText(str)
+    .replace(/[.#$\[\]\/]/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(0, 100);
+}
+
+// Catat 1 kejadian "kata dicari → kode KBLI ditemukan" ke agregat Firebase.
+// Hanya kode hasil TERATAS (paling relevan) yang dicatat per query, dan hanya
+// jika skor kecocokan cukup berarti — supaya agregat tetap bermakna.
+function logSearchAggregate(kode, rawQuery, score) {
+  if (!StatsDB.ready || !StatsDB.db) return;
+  if (!kode || !rawQuery) return;
+  const q = rawQuery.trim();
+  if (q.length < 3) return;
+  if ((score || 0) < 20) return;
+
+  const kataKey = sanitizeKataKey(q);
+  if (!kataKey) return;
+  const dedupKey = kode + '|' + kataKey;
+  if (StatsDB.sentThisSession.has(dedupKey)) return;
+  StatsDB.sentThisSession.add(dedupKey);
+
+  const kodeRef = StatsDB.db.ref(`${StatsDB.path}/${kode}`);
+  const kataRef = kodeRef.child('kata').child(kataKey);
+
+  kataRef.child('count').transaction(cur => (cur || 0) + 1);
+  kataRef.child('kataAsli').set(q); // simpan bentuk tampilan asli (bukan key ternormalisasi)
+  kodeRef.child('total').transaction(cur => (cur || 0) + 1);
+  kodeRef.child('updatedAt').set(firebase.database.ServerValue.TIMESTAMP);
+}
+
+// ── Halaman Statistik: ambil agregat & render (read-only, tanpa mengirim apa pun) ──
+function initStatsPage() {
+  const container = document.getElementById('statsResults');
+  const metaEl = document.getElementById('statsMeta');
+  if (!StatsDB.ready || !StatsDB.db) {
+    container.innerHTML = `<div class="stats-empty"><i class="bi bi-cloud-slash"></i>
+      <p>Belum terhubung ke Firebase.</p><small>Lengkapi <code>firebaseConfig</code> di index.html untuk mengaktifkan statistik.</small></div>`;
+    metaEl.textContent = '';
+    return;
+  }
+  metaEl.textContent = 'Memuat data…';
+  StatsDB.db.ref(StatsDB.path).once('value')
+    .then(snap => renderStatsList(snap.val() || {}))
+    .catch(err => {
+      console.warn('[StatsDB] Gagal memuat statistik:', err);
+      container.innerHTML = `<div class="stats-empty"><i class="bi bi-exclamation-triangle"></i><p>Gagal memuat data statistik.</p></div>`;
+      metaEl.textContent = '';
+    });
+}
+
+function renderStatsList(data) {
+  const container = document.getElementById('statsResults');
+  const metaEl = document.getElementById('statsMeta');
+  const kodeList = Object.keys(data);
+
+  if (!kodeList.length) {
+    metaEl.textContent = '';
+    container.innerHTML = `<div class="stats-empty"><i class="bi bi-graph-up"></i>
+      <p>Belum ada data pencarian.</p><small>Statistik akan muncul setelah pengguna melakukan pencarian di tab Cari Usaha.</small></div>`;
+    return;
+  }
+
+  const rows = kodeList.map(kode => {
+    const entry = data[kode] || {};
+    const kataObj = entry.kata || {};
+    const kataList = Object.keys(kataObj)
+      .map(k => ({ tampilan: kataObj[k].kataAsli || k, count: kataObj[k].count || 0 }))
+      .sort((a, b) => b.count - a.count);
+    const total = entry.total || kataList.reduce((s, k) => s + k.count, 0);
+    return { kode, total, kataList };
+  }).sort((a, b) => b.total - a.total);
+
+  metaEl.textContent = `${rows.length} kode KBLI dengan aktivitas pencarian`;
+
+  container.innerHTML = rows.map(row => {
+    const detail = (App.kbliSmartIdx || []).find(i => i.kode === row.kode)
+      || (App.kbliFlat || []).find(i => i.kode === row.kode);
+    const judul = detail ? detail.judul : '(detail KBLI tidak ditemukan di data lokal)';
+    const pathArr = detail ? (detail.judul_path || detail.path || []) : [];
+    const pathHtml = pathArr.length > 1
+      ? pathArr.slice(0, -1).map(p => escHtml(p)).join(' › ')
+      : '';
+
+    const kataHtml = row.kataList.map(k =>
+      `<span class="stats-kata-chip"><b>${escHtml(k.tampilan)}</b><span class="stats-kata-count">${k.count}</span></span>`
+    ).join('');
+
+    return `<div class="stats-card">
+      <div class="stats-card-top">
+        <span class="stats-card-code">${escHtml(row.kode)}</span>
+        <span class="stats-card-total">${row.total}× dicari</span>
+      </div>
+      <div class="stats-card-title">${escHtml(judul)}</div>
+      ${pathHtml ? `<div class="stats-card-path">${pathHtml}</div>` : ''}
+      <div class="stats-kata-list">${kataHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+
+(function boot() {
+  loadLearnDB();
+  const kbliData = loadCache('kbli_data');
+  const kbliMeta = loadCache('kbli_meta');
+  if (kbliData && kbliData.kategori) {
+    App.kbli = kbliData.kategori;
+    App.kbliMeta = kbliMeta;
+    // Rebuild flat index
+    App.kbliFlat = [];
+    kbliData.kategori.forEach(kat => {
+      App.kbliFlat.push({ level:'kategori', kode:kat.kode, judul:kat.judul });
+      (kat.golongan_pokok||[]).forEach(gp => {
+        App.kbliFlat.push({ level:'golongan_pokok', kode:gp.kode, judul:gp.judul });
+        (gp.golongan||[]).forEach(g => {
+          App.kbliFlat.push({ level:'golongan', kode:g.kode, judul:g.judul });
+          (g.subgolongan||[]).forEach(sg => {
+            App.kbliFlat.push({ level:'subgolongan', kode:sg.kode, judul:sg.judul });
+            (sg.kelompok||[]).forEach(k => App.kbliFlat.push({ level:'kelompok', kode:k.kode, judul:k.judul }));
+          });
+        });
+      });
+    });
+    // Rebuild smart index for "Cari Usaha"
+    App.kbliSmartIdx = buildSmartIndex(kbliData.kategori);
+  }
+  const kbjiData = loadCache('kbji_data');
+  const kbjiMeta = loadCache('kbji_meta');
+  if (kbjiData && kbjiData.hierarchy) {
+    App.kbji = kbjiData.hierarchy;
+    App.kbjiMeta = kbjiMeta;
+    App.kbjiFlat = [];
+    kbjiData.hierarchy.forEach(gp => {
+      App.kbjiFlat.push({ level: 'golongan_pokok', kode: gp.kode, judul: gp.judul });
+      (gp.golongan || []).forEach(gol => {
+        App.kbjiFlat.push({ level: 'golongan', kode: gol.kode, judul: gol.judul });
+        (gol.subgolongan || []).forEach(sub => {
+          App.kbjiFlat.push({ level: 'subgolongan', kode: sub.kode, judul: sub.judul });
+          (sub.kelompok || []).forEach(kel => {
+            App.kbjiFlat.push({ level: 'kelompok', kode: kel.kode, judul: kel.judul });
+          });
+        });
+      });
+    });
+  }
+  renderKbli(null);
+  renderKbji(null);
+  updateSettings();
+  updateLearnInfo();
+  initFirebaseStats();
+  // Auto-check GitHub for updates (non-blocking)
+  setTimeout(() => githubSync.autoCheck(), 1200);
+})();
+</script>
+</body>
+</html>
